@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local compute mode (optional offline operation)
 - Email notifications for important events
 
+## [0.1.1] - 2025-11-06
+
+### Added
+- **Enhanced Energy Dashboard Integration**: Comprehensive sensor extraction during setup
+  - Auto-detects ALL sensors from Energy Dashboard with availability status
+  - Groups sensors by type: solar, battery discharge/charge, grid import/export
+  - Detailed logging shows sensor status (✅ available / ❌ unavailable)
+  - Foundation for upcoming multi-sensor support (multiple PV strings, batteries)
+
+### Improved
+- Better visibility during config flow setup process
+- More detailed debug logging for troubleshooting
+
 ## [0.1.0-alpha] - 2025-11-06
 
 ### Added - Initial Alpha Release
