@@ -287,7 +287,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_UPDATE_INTERVAL: self._update_interval,
                     CONF_DETECTED_ENTITIES: self._detected_entities,
                 },
-            )   )
+            )
 
     async def _save_learned_device(self, control_entities: dict[str, str]) -> None:
         """Save learned device configuration.
