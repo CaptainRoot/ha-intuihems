@@ -1,172 +1,105 @@
-# intuiHEMS Battery Optimizer for Home Assistant
+# intuiHEMS - Smart Battery Optimizer
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub Release](https://img.shields.io/github/release/intui/intuitherm.svg)](https://github.com/intui/intuitherm/releases)
-[![License](https://img.shields.io/github/license/intui/intuitherm.svg)](LICENSE)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/release/intui/intuiHEMS.svg)](https://github.com/intui/intuiHEMS/releases)
 
-**Intelligent home battery optimization using Model Predictive Control (MPC) and machine learning forecasting.**
+> **Save money. Save the planet.** Automatically optimize your home battery to use cheap renewable energy and reduce grid strain.
 
-## Features
+## 🌍 Why intuiHEMS?
 
-- 🧠 **AI-Powered Optimization** - Model Predictive Control with ML-based consumption and solar forecasting
-- 💰 **Maximize Savings** - Optimizes battery charging/discharging based on dynamic electricity prices
-- ☁️ **Cloud-Based Compute** - Works on any Home Assistant hardware (even Raspberry Pi Zero)
-- 🔒 **Privacy-First** - GDPR compliant with data export and deletion capabilities
-- 🆓 **Alpha Testing** - Free during alpha phase (up to 100 users)
-- ⚡ **Pull-Based Control** - Works behind NAT/firewall with local execution
-- 🌍 **Multi-Source Pricing** - Supports Tibber API or EPEX Spot prices (8 European zones)
+Climate change demands smarter energy use. intuiHEMS helps you:
 
-## What is intuiHEMS?
+- **💰 Save money** - Charge when electricity is cheap, use when it's expensive
+- **🌱 Use renewable energy** - Maximize solar self-consumption, charge from grid when renewables are abundant
+- **⚡ Support the grid** - Reduce peak demand, enable virtual power plants
+- **🤖 Zero effort** - AI does the thinking, you save automatically
 
-intuiHEMS (Intelligent Home Energy Management System) is a Home Assistant integration that automatically optimizes your battery storage system to minimize electricity costs. It uses:
+## ✨ Key Features
 
-1. **Model Predictive Control (MPC)** - Optimization algorithm that plans 24 hours ahead
-2. **Machine Learning Forecasts** - Predicts household consumption and solar production
-3. **Dynamic Pricing** - Integrates with Tibber or EPEX Spot day-ahead prices
-4. **Cloud Processing** - Heavy computation runs in the cloud, HA executes locally
+- **Zero-config setup** - Auto-detects your battery, solar panels, and house load
+- **Smart device learning** - Knows how to control FoxESS, Solis, Huawei, SolarEdge, Growatt (and learns new ones!)
+- **AI-powered** - Forecasts your consumption, solar production, and electricity prices
+- **Free alpha** - No cost during testing phase
+- **Privacy-first** - Your data stays yours
 
-## How It Works
+## 🚀 Quick Start
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Home Assistant                                          │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ intuiHEMS Integration                             │  │
-│  │ • Reads: Battery SOC, House Load, Solar Power     │  │
-│  │ • Sends data to cloud every 15 minutes            │  │
-│  │ • Fetches 24h control plan from cloud             │  │
-│  │ • Executes: Battery mode changes (Force Charge,   │  │
-│  │            Self Use, etc.)                         │  │
-│  └───────────────────────────────────────────────────┘  │
-│         ▲                                  │             │
-│         │ reads                            │ controls    │
-│         │                                  ▼             │
-│  ┌──────────────┐              ┌──────────────────┐     │
-│  │ Battery SOC  │              │ Battery Control  │     │
-│  │ House Load   │              │ (FoxESS, etc.)   │     │
-│  │ Solar Power  │              │                  │     │
-│  └──────────────┘              └──────────────────┘     │
-└─────────────────────────────────────────────────────────┘
-                    │ HTTPS (15 min)
-                    ▼
-         ┌──────────────────────────┐
-         │ intuiHEMS Cloud Service  │
-         │ • MPC Optimization       │
-         │ • ML Forecasting         │
-         │ • Price Fetching         │
-         │ • Multi-Tenant SaaS      │
-         └──────────────────────────┘
-```
+1. **Install via HACS**
+   - HACS → Integrations → Explore & Download Repositories
+   - Search "intuiHEMS"
+   - Install & Restart
 
-## Requirements
+2. **Add Integration**
+   - Settings → Devices & Services → Add Integration
+   - Search "intuiHEMS"
+   - Click through setup - we auto-detect everything!
 
-### Hardware
-- Home Assistant 2024.4.0 or later
-- Battery storage system with:
-  - State of Charge (SOC) sensor (%)
-  - Control entities (battery mode, charge/discharge power)
-  - Supported inverters: FoxESS, SolarEdge, Fronius, etc.
+3. **Done!** ✨
+   - Your battery is now optimized 24/7
+   - Check savings in your dashboard
 
-### Pricing
-- **Option 1:** Tibber account with API token (recommended)
-- **Option 2:** EPEX Spot prices via ENTSO-E (free, supports 8 EU zones)
+## 📋 Requirements
 
-### Network
-- Internet connection required (cloud-based optimization)
-- Works behind NAT/firewall (pull-based control)
+- Home Assistant 2024.4.0+
+- Home battery system (any brand with HA integration)
+- Energy Dashboard configured
+- Internet connection
 
-## Installation
+## 🎯 What Gets Optimized?
 
-### Via HACS (Recommended)
+**Before intuiHEMS:**
+- Battery charges randomly
+- You buy expensive peak electricity
+- Excess solar is wasted or sold cheap
 
-1. Open **HACS** in Home Assistant
-2. Go to **Integrations**
-3. Click the **⋮** menu → **Custom repositories**
-4. Add repository: `https://github.com/intui/intuitherm`
-5. Category: **Integration**
-6. Click **Add**
-7. Search for **intuiHEMS Battery Optimizer**
-8. Click **Download**
-9. **Restart Home Assistant**
+**With intuiHEMS:**
+- Battery charges when electricity is cheap (or solar surplus)
+- Battery powers your home during expensive hours
+- Solar is used optimally
+- **Result: 20-40% lower electricity bills** 💰
 
-### Manual Installation
+## 🧠 How It Works
 
-1. Copy the `custom_components/intuitherm` directory to your Home Assistant `config/custom_components/` folder
-2. Restart Home Assistant
+1. **Every 15 minutes**: Reads your battery level, house consumption, solar production
+2. **AI forecasts**: Predicts next 24 hours of consumption, solar, and prices
+3. **Optimization**: Calculates the perfect battery schedule
+4. **Execution**: Tells your battery when to charge/discharge
 
-## Configuration
+All the heavy AI computation happens in the cloud - works on any Home Assistant device!
 
-### Step 1: Add Integration
+## 🎬 Supported Devices
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for **intuiHEMS**
-4. Follow the configuration wizard
+**Auto-detected (zero config):**
+- FoxESS (H1, H3 series)
+- Solis
+- Huawei
+- SolarEdge  
+- Growatt
 
-### Step 2: Configuration Wizard
+**Learning system:**
+- Don't see your brand? No problem!
+- Configure it once manually
+- We learn and help future users automatically
 
-The integration uses automatic registration - no manual API key needed!
+## ⚠️ Alpha Status
 
-**Part 1: Connection Setup**
-- API URL: `https://api.intuihems.io` (default)
-- Registration happens automatically
+**Current Version:** 2025.11.9.1
 
-**Part 2: Battery Sensors**
-- Select your battery SOC sensor
-- Select house load sensor (power in kW)
-- Optional: Solar power sensor
+This is an **alpha release**. What this means:
+- ✅ Core features work great
+- ✅ Actively developed and improved
+- ⚠️ Free during alpha (normally €5/month planned)
+- ⚠️ May have bugs - please report!
+- 📊 Limited to 100 alpha testers
 
-**Part 3: Battery Configuration**
-- Battery capacity (kWh)
-- Maximum charge/discharge power (kW)
-- Minimum/Maximum SOC limits (%)
+**Your feedback shapes the product!**
 
-**Part 4: Pricing Configuration**
-- Choose pricing source:
-  - **Tibber**: Enter your Tibber API token
-  - **EPEX Spot**: Set your electricity markup (default 5 cents/kWh)
-- Set feed-in tariff (EUR/kWh)
+## 📊 What You Get
 
-**Part 5: Control Entities**
-- Select battery mode entity (e.g., `select.battery_mode`)
-- Select charge/discharge power entities
-
-### Step 3: Verification
-
-After setup, you should see:
-- ✅ Sensors: `sensor.intuihems_*` (battery SOC, next action, daily savings, etc.)
-- ✅ Switch: `switch.intuihems_optimization_enabled`
-- ✅ Data flowing to cloud every 15 minutes
-- ✅ First control decision within 24 hours (after first MPC run)
-
-## Entities Created
-
-### Sensors (Read-Only)
-
-| Entity | Description | Unit |
-|--------|-------------|------|
-| `sensor.intuihems_battery_soc` | Current battery state of charge | % |
-| `sensor.intuihems_next_action` | Next battery control action | - |
-| `sensor.intuihems_next_action_reason` | Explanation for next action | - |
-| `sensor.intuihems_daily_cost` | Today's electricity cost | EUR |
-| `sensor.intuihems_daily_savings` | Today's savings vs. baseline | EUR |
-| `sensor.intuihems_monthly_savings` | Monthly savings estimate | EUR |
-| `sensor.intuihems_consumption_forecast` | 24h consumption forecast | - |
-| `sensor.intuihems_solar_forecast` | 24h solar forecast | - |
-| `sensor.intuihems_price_forecast` | 24h price forecast | - |
-
-### Controls
-
-| Entity | Description |
-|--------|-------------|
-| `switch.intuihems_optimization_enabled` | Enable/disable automatic optimization |
-
-### Services
-
-| Service | Description |
-|---------|-------------|
-| `intuihems.refresh_data` | Force immediate data sync with cloud |
-| `intuihems.run_optimization` | Manually trigger MPC optimization |
+- **Daily savings estimate** - See how much you're saving
+- **Next action explanation** - Understand what your battery will do and why
+- **Optimization control** - Enable/disable anytime
+- **Forecasts** - See predicted consumption, solar, and prices
 
 ## Alpha Testing Program
 
@@ -180,7 +113,7 @@ After setup, you should see:
 
 ### How to Report Issues
 
-1. Check existing [GitHub Issues](https://github.com/intui/intuitherm/issues)
+1. Check existing [GitHub Issues](https://github.com/intui/intuiHEMS/issues)
 2. Create new issue with:
    - Home Assistant version
    - Integration version
@@ -239,44 +172,11 @@ Data is **never shared** with third parties. Data retention: 30 days (configurab
 
 Full privacy policy: https://api.intuihems.io/api/v1/gdpr/privacy
 
-## Troubleshooting
+## 🆘 Need Help?
 
-### Integration Not Appearing
-
-1. Check HACS logs: `Settings → System → Logs`
-2. Verify `custom_components/intuitherm` exists
-3. Restart Home Assistant
-
-### API Connection Failed
-
-1. Check internet connection
-2. Verify cloud service status: https://api.intuihems.io/health
-3. Check Home Assistant logs for authentication errors
-
-### No Control Actions
-
-1. Wait 24 hours for first MPC run
-2. Check cloud service received data:
-   - Settings → intuiHEMS → Diagnostics
-3. Verify battery configuration is complete
-4. Check optimization is enabled: `switch.intuihems_optimization_enabled`
-
-### Battery Not Responding
-
-1. Verify control entities are correct:
-   - Settings → Devices & Services → intuiHEMS → Configure
-2. Check entity states in Developer Tools
-3. Test manual control via Home Assistant UI
-
-## Supported Inverters
-
-intuiHEMS has been tested with:
-- ✅ FoxESS (H3, H1 series) via [foxess-modbus](https://github.com/nathanmarlor/foxess_modbus)
-- 🔄 SolarEdge (community testing)
-- 🔄 Fronius (community testing)
-- 🔄 Other inverters with standard HA entities
-
-**Note:** Any battery system with SOC sensor and control entities should work. Please report compatibility!
+- 💬 [Discussions](https://github.com/intui/intuiHEMS/discussions) - Ask questions
+- 🐛 [Issues](https://github.com/intui/intuiHEMS/issues) - Report bugs
+- 📖 [Documentation](https://github.com/intui/intuiHEMS) - Full guides
 
 ## Technical Details
 
@@ -310,8 +210,8 @@ intuiHEMS has been tested with:
 
 ```bash
 # Clone repository
-git clone https://github.com/intui/intuitherm.git
-cd intuitherm
+git clone https://github.com/intui/intuiHEMS.git
+cd intuiHEMS
 
 # Create development environment
 python3 -m venv venv
@@ -372,9 +272,9 @@ This project is licensed under the BSD-3-Clause License - see [LICENSE](LICENSE)
 
 ## Links
 
-- **Documentation:** https://github.com/intui/intuitherm
-- **Issues:** https://github.com/intui/intuitherm/issues
-- **Discussions:** https://github.com/intui/intuitherm/discussions
+- **Documentation:** https://github.com/intui/intuiHEMS
+- **Issues:** https://github.com/intui/intuiHEMS/issues
+- **Discussions:** https://github.com/intui/intuiHEMS/discussions
 - **Cloud Service:** https://api.intuihems.io
 - **Privacy Policy:** https://api.intuihems.io/api/v1/gdpr/privacy
 
