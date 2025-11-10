@@ -18,6 +18,14 @@ from .const import (
     ENDPOINT_CONTROL_OVERRIDE,
     ENDPOINT_CONTROL_ENABLE,
     ENDPOINT_CONTROL_DISABLE,
+    ENDPOINT_SENSORS,
+    ENDPOINT_SENSOR_READINGS,
+    CONF_SOLAR_SENSORS,
+    CONF_BATTERY_DISCHARGE_SENSORS,
+    CONF_BATTERY_CHARGE_SENSORS,
+    CONF_GRID_IMPORT_SENSORS,
+    CONF_GRID_EXPORT_SENSORS,
+    CONF_BATTERY_SOC_ENTITY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +41,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         service_url: str,
         api_key: str,
         update_interval: timedelta,
+        entry: Any = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -45,6 +54,8 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         self.api_key = api_key
         self.session = session
         self.headers = {"Authorization": f"Bearer {api_key}"}
+        self.entry = entry
+        self._sensors_registered = False
 
         _LOGGER.info(
             "IntuiTherm coordinator initialized (service: %s, interval: %s)",
@@ -57,6 +68,15 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Fetching data from IntuiTherm service")
 
         try:
+            # Register sensors on first run
+            if not self._sensors_registered and self.entry:
+                await self._register_sensors()
+                self._sensors_registered = True
+
+            # Send sensor readings
+            if self.entry:
+                await self._send_sensor_readings()
+
             async with asyncio.timeout(10):
                 # Fetch all endpoints in parallel for efficiency
                 health_task = self._fetch_json(ENDPOINT_HEALTH)
@@ -208,3 +228,116 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("Failed to disable automatic control: %s", err)
             return {"status": "failed", "detail": str(err)}
+
+    async def _register_sensors(self) -> None:
+        """Register sensors with the backend."""
+        if not self.entry:
+            return
+
+        config = {**self.entry.data, **self.entry.options}
+        sensors_to_register = []
+
+        # Solar sensors
+        for entity_id in config.get(CONF_SOLAR_SENSORS, []):
+            sensors_to_register.append({
+                "entity_id": entity_id,
+                "sensor_type": "solar_production",
+                "unit": "W",
+            })
+
+        # Battery discharge sensors
+        for entity_id in config.get(CONF_BATTERY_DISCHARGE_SENSORS, []):
+            sensors_to_register.append({
+                "entity_id": entity_id,
+                "sensor_type": "battery_discharge",
+                "unit": "W",
+            })
+
+        # Battery charge sensors
+        for entity_id in config.get(CONF_BATTERY_CHARGE_SENSORS, []):
+            sensors_to_register.append({
+                "entity_id": entity_id,
+                "sensor_type": "battery_charge",
+                "unit": "W",
+            })
+
+        # Grid import sensors
+        for entity_id in config.get(CONF_GRID_IMPORT_SENSORS, []):
+            sensors_to_register.append({
+                "entity_id": entity_id,
+                "sensor_type": "grid_import",
+                "unit": "W",
+            })
+
+        # Grid export sensors
+        for entity_id in config.get(CONF_GRID_EXPORT_SENSORS, []):
+            sensors_to_register.append({
+                "entity_id": entity_id,
+                "sensor_type": "grid_export",
+                "unit": "W",
+            })
+
+        # Battery SOC
+        if battery_soc := config.get(CONF_BATTERY_SOC_ENTITY):
+            sensors_to_register.append({
+                "entity_id": battery_soc,
+                "sensor_type": "battery_soc",
+                "unit": "%",
+            })
+
+        if not sensors_to_register:
+            _LOGGER.warning("No sensors configured to register")
+            return
+
+        _LOGGER.info("Registering %d sensors with backend", len(sensors_to_register))
+
+        try:
+            for sensor in sensors_to_register:
+                await self._post_json(ENDPOINT_SENSORS, data=sensor)
+            _LOGGER.info("Successfully registered sensors")
+        except Exception as err:
+            _LOGGER.error("Failed to register sensors: %s", err)
+
+    async def _send_sensor_readings(self) -> None:
+        """Send current sensor readings to the backend."""
+        if not self.entry:
+            return
+
+        config = {**self.entry.data, **self.entry.options}
+        readings = []
+
+        # Collect all sensor entity IDs
+        all_sensors = []
+        all_sensors.extend(config.get(CONF_SOLAR_SENSORS, []))
+        all_sensors.extend(config.get(CONF_BATTERY_DISCHARGE_SENSORS, []))
+        all_sensors.extend(config.get(CONF_BATTERY_CHARGE_SENSORS, []))
+        all_sensors.extend(config.get(CONF_GRID_IMPORT_SENSORS, []))
+        all_sensors.extend(config.get(CONF_GRID_EXPORT_SENSORS, []))
+        if battery_soc := config.get(CONF_BATTERY_SOC_ENTITY):
+            all_sensors.append(battery_soc)
+
+        # Get current state for each sensor
+        for entity_id in all_sensors:
+            state = self.hass.states.get(entity_id)
+            if state and state.state not in ("unknown", "unavailable"):
+                try:
+                    value = float(state.state)
+                    readings.append({
+                        "entity_id": entity_id,
+                        "value": value,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+                except (ValueError, TypeError):
+                    _LOGGER.debug("Could not parse value for %s: %s", entity_id, state.state)
+
+        if not readings:
+            return
+
+        _LOGGER.debug("Sending %d sensor readings to backend", len(readings))
+
+        # Send readings in batch
+        try:
+            await self._post_json(f"{ENDPOINT_SENSORS}/batch_readings", data={"readings": readings})
+        except Exception as err:
+            _LOGGER.debug("Failed to send sensor readings: %s", err)
+

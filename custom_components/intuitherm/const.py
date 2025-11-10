@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "intuitherm"
 
 # Version
-VERSION: Final = "2025.11.10.2"
+VERSION: Final = "2025.11.10.3"
 
 # Platforms
 PLATFORMS: Final = ["sensor", "switch"]
@@ -48,6 +48,8 @@ ENDPOINT_CONTROL_OVERRIDE: Final = "/api/v1/control/override"
 ENDPOINT_CONTROL_ENABLE: Final = "/api/v1/control/enable"
 ENDPOINT_CONTROL_DISABLE: Final = "/api/v1/control/disable"
 ENDPOINT_METRICS: Final = "/api/v1/metrics"
+ENDPOINT_SENSORS: Final = "/api/v1/sensors"
+ENDPOINT_SENSOR_READINGS: Final = "/api/v1/sensors/{sensor_id}/readings"
 
 # Service names
 SERVICE_MANUAL_OVERRIDE: Final = "manual_override"
