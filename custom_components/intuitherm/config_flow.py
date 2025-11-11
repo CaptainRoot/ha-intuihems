@@ -32,8 +32,12 @@ from .const import (
     CONF_BATTERY_CHARGE_POWER,
     CONF_BATTERY_DISCHARGE_POWER,
     CONF_HOUSE_LOAD_CALC_MODE,
+    CONF_EPEX_MARKUP,
+    CONF_GRID_EXPORT_PRICE,
     DEFAULT_SERVICE_URL,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_EPEX_MARKUP,
+    DEFAULT_GRID_EXPORT_PRICE,
     ENDPOINT_HEALTH,
     DEVICE_CONTROL_MAPPINGS,
 )
@@ -63,6 +67,13 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._detected_entities: dict[str, Any] = {}
         self._device_info: dict[str, Any] | None = None  # Track device for learning
         self._device_learning_store = None  # Will be initialized when needed
+        
+        # Multi-device and multi-sensor support
+        self._discovered_devices: list[dict[str, Any]] = []  # All found devices
+        self._all_solar_sensors: list[dict[str, Any]] = []  # All solar sensors found
+        self._all_batteries: list[dict[str, Any]] = []  # All battery devices found
+        self._selected_solar_sensors: list[str] = []  # User-selected solar sensors
+        self._selected_battery_idx: int = 0  # Index of selected battery (if multiple)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -71,16 +82,18 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         from .const import VERSION
         
         if user_input is not None:
-            # Use hard-coded development values
+            # Use hard-coded development values (TODO: Add credential step)
             self._service_url = DEFAULT_SERVICE_URL
             self._api_key = "A6SJ7InZ0cjMMNEP7FS2YOqfr6JMvxZVwbKfPC-dYsk"  # Development API key
             self._update_interval = DEFAULT_UPDATE_INTERVAL
             
-            _LOGGER.info(
-                "Starting intuiHEMS setup (version %s) with service at %s",
-                VERSION,
-                self._service_url,
-            )
+            _LOGGER.info("=" * 60)
+            _LOGGER.info("IntuiHEMS Setup Flow Started")
+            _LOGGER.info("Version: %s", VERSION)
+            _LOGGER.info("Service URL: %s", self._service_url)
+            _LOGGER.info("Update Interval: %d seconds", self._update_interval)
+            _LOGGER.info("=" * 60)
+            
             # Move directly to auto-detection
             return await self.async_step_auto_detect()
 
@@ -101,12 +114,14 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_review()
 
         # Run auto-detection
-        _LOGGER.info("Starting entity auto-detection")
+        _LOGGER.info("")
+        _LOGGER.info("STEP 1: Starting Entity Auto-Detection")
+        _LOGGER.info("-" * 60)
 
         try:
             # Phase 1: Extract ALL Energy Dashboard sensors with availability
             all_energy_sensors = await self._get_all_energy_sensors()
-            _LOGGER.info("Extracted Energy Dashboard sensors - Details:")
+            _LOGGER.info("Energy Dashboard Sensors Extracted:")
             for category, sensor_list in all_energy_sensors.items():
                 available_count = sum(1 for s in sensor_list if s["available"])
                 _LOGGER.info(
@@ -116,36 +131,67 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     available_count
                 )
                 for sensor in sensor_list:
+                    # Classify sensor type
+                    sensor_info = self._classify_sensor(sensor["entity_id"])
                     status = "✅" if sensor["available"] else "❌"
                     _LOGGER.info(
-                        "    %s %s [%s] state=%s",
+                        "    %s %s [%s, %s] value=%s",
                         status,
                         sensor["entity_id"],
+                        sensor_info.get("type", "unknown"),
                         sensor["unit"],
                         sensor["state"]
                     )
 
             # Query Energy Dashboard configuration
+            _LOGGER.info("")
+            _LOGGER.info("STEP 2: Querying Energy Dashboard Configuration")
+            _LOGGER.info("-" * 60)
             energy_prefs = await self._get_energy_prefs()
 
             if not energy_prefs:
-                _LOGGER.debug("Energy Dashboard not configured, skipping auto-detection")
-                # Skip to manual review
-                return await self.async_step_review()
+                _LOGGER.warning("⚠️  Energy Dashboard not configured")
+                _LOGGER.info("Skipping Energy Dashboard detection, will use pattern matching")
+            else:
+                _LOGGER.info("✅ Energy Dashboard configured")
+                source_counts = {}
+                for source in energy_prefs.get("energy_sources", []):
+                    source_type = source.get("type")
+                    source_counts[source_type] = source_counts.get(source_type, 0) + 1
+                for source_type, count in source_counts.items():
+                    _LOGGER.info("  - %s sources: %d", source_type, count)
 
             # Discover devices from energy entities
-            devices = await self._discover_devices(energy_prefs)
-            _LOGGER.info("Discovered %d devices", len(devices))
+            _LOGGER.info("")
+            _LOGGER.info("STEP 3: Discovering Devices from Energy Dashboard")
+            _LOGGER.info("-" * 60)
+            devices = await self._discover_devices(energy_prefs) if energy_prefs else {}
+            _LOGGER.info("Discovered %d device(s)", len(devices))
 
             # Find relevant power sensors on devices
+            _LOGGER.info("")
+            _LOGGER.info("STEP 4: Scanning Device Sensors")
+            _LOGGER.info("-" * 60)
             for device_id, device_info in devices.items():
+                _LOGGER.info("Scanning device: %s", device_info["name"])
                 sensors = await self._find_power_sensors(device_id)
                 if sensors:
+                    # Store complete device information with sensors
+                    device_entry = {
+                        "device_id": device_id,
+                        "name": device_info["name"],
+                        "manufacturer": device_info.get("manufacturer"),
+                        "model": device_info.get("model"),
+                        "platform": device_info.get("platform"),
+                        "sensors": sensors,
+                    }
+                    self._discovered_devices.append(device_entry)
+                    
                     # Store device info for potential learning
                     if sensors.get("device_info") and not self._device_info:
                         self._device_info = sensors["device_info"]
                     
-                    # Store best matches
+                    # Store best single matches (for backward compatibility)
                     if sensors.get("battery_soc") and not self._detected_entities.get(
                         CONF_BATTERY_SOC_ENTITY
                     ):
@@ -167,6 +213,26 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "house_load"
                         ]["entity_id"]
                     
+                    # NEW: Collect ALL multi-sensors
+                    if sensors.get("all_pv_sensors"):
+                        self._all_solar_sensors.extend(sensors["all_pv_sensors"])
+                    if sensors.get("all_battery_charge_sensors"):
+                        for sensor in sensors["all_battery_charge_sensors"]:
+                            if sensor not in self._detected_entities.get(CONF_BATTERY_CHARGE_SENSORS, []):
+                                self._detected_entities.setdefault(CONF_BATTERY_CHARGE_SENSORS, []).append(sensor["entity_id"])
+                    if sensors.get("all_battery_discharge_sensors"):
+                        for sensor in sensors["all_battery_discharge_sensors"]:
+                            if sensor not in self._detected_entities.get(CONF_BATTERY_DISCHARGE_SENSORS, []):
+                                self._detected_entities.setdefault(CONF_BATTERY_DISCHARGE_SENSORS, []).append(sensor["entity_id"])
+                    if sensors.get("all_grid_consumption_sensors"):
+                        for sensor in sensors["all_grid_consumption_sensors"]:
+                            if sensor not in self._detected_entities.get(CONF_GRID_IMPORT_SENSORS, []):
+                                self._detected_entities.setdefault(CONF_GRID_IMPORT_SENSORS, []).append(sensor["entity_id"])
+                    if sensors.get("all_grid_feedin_sensors"):
+                        for sensor in sensors["all_grid_feedin_sensors"]:
+                            if sensor not in self._detected_entities.get(CONF_GRID_EXPORT_SENSORS, []):
+                                self._detected_entities.setdefault(CONF_GRID_EXPORT_SENSORS, []).append(sensor["entity_id"])
+                    
                     # Store detected battery control entities
                     if sensors.get("control_entities"):
                         control_entities = sensors["control_entities"]
@@ -182,64 +248,255 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             self._detected_entities[CONF_BATTERY_DISCHARGE_POWER] = control_entities[
                                 CONF_BATTERY_DISCHARGE_POWER
                             ]
+                    
+                    # Log what we found on this device
+                    _LOGGER.info("  Found on device:")
+                    if sensors.get("all_pv_sensors"):
+                        _LOGGER.info("    PV sensors: %d", len(sensors["all_pv_sensors"]))
+                        for pv in sensors["all_pv_sensors"]:
+                            _LOGGER.info("      - %s [%s]", pv["entity_id"], "cumulative ⭐" if pv["is_cumulative"] else "instantaneous")
+                    if sensors.get("battery_soc"):
+                        _LOGGER.info("    Battery SoC: %s", sensors["battery_soc"]["entity_id"])
+                    if sensors.get("all_battery_charge_sensors"):
+                        _LOGGER.info("    Battery Charge: %d sensor(s)", len(sensors["all_battery_charge_sensors"]))
+                        for bc in sensors["all_battery_charge_sensors"]:
+                            _LOGGER.info("      - %s [%s]", bc["entity_id"], "cumulative ⭐" if bc["is_cumulative"] else "instantaneous")
+                    if sensors.get("all_battery_discharge_sensors"):
+                        _LOGGER.info("    Battery Discharge: %d sensor(s)", len(sensors["all_battery_discharge_sensors"]))
+                        for bd in sensors["all_battery_discharge_sensors"]:
+                            _LOGGER.info("      - %s [%s]", bd["entity_id"], "cumulative ⭐" if bd["is_cumulative"] else "instantaneous")
+                    if sensors.get("all_grid_consumption_sensors"):
+                        _LOGGER.info("    Grid Consumption: %d sensor(s)", len(sensors["all_grid_consumption_sensors"]))
+                        for gc in sensors["all_grid_consumption_sensors"]:
+                            _LOGGER.info("      - %s [%s]", gc["entity_id"], "cumulative ⭐" if gc["is_cumulative"] else "instantaneous")
+                    if sensors.get("all_grid_feedin_sensors"):
+                        _LOGGER.info("    Grid Feed-in: %d sensor(s)", len(sensors["all_grid_feedin_sensors"]))
+                        for gf in sensors["all_grid_feedin_sensors"]:
+                            _LOGGER.info("      - %s [%s]", gf["entity_id"], "cumulative ⭐" if gf["is_cumulative"] else "instantaneous")
             
             # Check for learned patterns if no control entities detected
             if self._device_info and not self._detected_entities.get(CONF_BATTERY_MODE_SELECT):
                 await self._check_learned_patterns()
 
+            # Convert collected solar sensors to CONF_SOLAR_SENSORS list
+            if self._all_solar_sensors:
+                solar_sensor_ids = [s["entity_id"] for s in self._all_solar_sensors]
+                self._detected_entities[CONF_SOLAR_SENSORS] = solar_sensor_ids
+                _LOGGER.info("")
+                _LOGGER.info("Collected %d PV sensor(s) total", len(solar_sensor_ids))
+
             # Priority 1: Try Energy Dashboard cumulative sensors first (best source of truth)
             # These are kWh sensors that the backend will convert to kW via derivatives
-            _LOGGER.info("Trying Energy Dashboard cumulative sensor detection")
+            _LOGGER.info("")
+            _LOGGER.info("STEP 5: Prioritizing Cumulative Energy Sensors")
+            _LOGGER.info("-" * 60)
             dashboard_sensors = await self._find_energy_dashboard_sensors()
 
             if dashboard_sensors.get("solar_power"):
                 # Prefer Energy Dashboard cumulative sensors over device-based detection
-                self._detected_entities[CONF_SOLAR_POWER_ENTITY] = dashboard_sensors[
-                    "solar_power"
-                ]["entity_id"]
+                entity_id = dashboard_sensors["solar_power"]["entity_id"]
+                self._detected_entities[CONF_SOLAR_POWER_ENTITY] = entity_id
                 is_cumulative = dashboard_sensors["solar_power"].get("is_cumulative", False)
+                sensor_info = self._classify_sensor(entity_id)
+                
                 _LOGGER.info(
-                    "✅ Energy Dashboard solar: %s (cumulative=%s)",
-                    dashboard_sensors["solar_power"]["entity_id"],
-                    is_cumulative,
+                    "✅ Solar sensor from Energy Dashboard: %s",
+                    entity_id
                 )
+                _LOGGER.info(
+                    "   Type: %s | Unit: %s | Confidence: High",
+                    sensor_info.get("type", "unknown"),
+                    sensor_info.get("unit", "unknown")
+                )
+                if is_cumulative:
+                    _LOGGER.info("   ⭐ Cumulative sensor - backend will compute power derivative")
 
             # Fallback: If no/few sensors detected, try pattern-based search
-            if len([v for v in self._detected_entities.values() if v]) < 2:
-                _LOGGER.info("Device-based detection found few sensors, trying pattern-based fallback")
+            detected_count = len([v for v in self._detected_entities.values() if v])
+            if detected_count < 2:
+                _LOGGER.info("")
+                _LOGGER.info("STEP 6: Pattern-Based Fallback Detection")
+                _LOGGER.info("-" * 60)
+                _LOGGER.info("Only %d sensor(s) detected so far, trying pattern matching", detected_count)
                 fallback_sensors = await self._find_sensors_by_pattern()
 
                 if fallback_sensors.get("battery_soc") and not self._detected_entities.get(
                     CONF_BATTERY_SOC_ENTITY
                 ):
-                    self._detected_entities[CONF_BATTERY_SOC_ENTITY] = fallback_sensors[
-                        "battery_soc"
-                    ]["entity_id"]
-                    _LOGGER.info("Pattern-detected battery SOC: %s", fallback_sensors["battery_soc"]["entity_id"])
+                    entity_id = fallback_sensors["battery_soc"]["entity_id"]
+                    self._detected_entities[CONF_BATTERY_SOC_ENTITY] = entity_id
+                    sensor_info = self._classify_sensor(entity_id)
+                    _LOGGER.info(
+                        "⚠️  Pattern-detected battery SOC: %s [%s, %s]",
+                        entity_id,
+                        sensor_info.get("type", "unknown"),
+                        sensor_info.get("unit", "unknown")
+                    )
 
                 if fallback_sensors.get("solar_power") and not self._detected_entities.get(
                     CONF_SOLAR_POWER_ENTITY
                 ):
-                    self._detected_entities[CONF_SOLAR_POWER_ENTITY] = fallback_sensors[
-                        "solar_power"
-                    ]["entity_id"]
-                    _LOGGER.info("Pattern-detected solar power: %s", fallback_sensors["solar_power"]["entity_id"])
+                    entity_id = fallback_sensors["solar_power"]["entity_id"]
+                    self._detected_entities[CONF_SOLAR_POWER_ENTITY] = entity_id
+                    sensor_info = self._classify_sensor(entity_id)
+                    _LOGGER.info(
+                        "⚠️  Pattern-detected solar: %s [%s, %s]",
+                        entity_id,
+                        sensor_info.get("type", "unknown"),
+                        sensor_info.get("unit", "unknown")
+                    )
 
                 if fallback_sensors.get("house_load") and not self._detected_entities.get(
                     CONF_HOUSE_LOAD_ENTITY
                 ):
-                    self._detected_entities[CONF_HOUSE_LOAD_ENTITY] = fallback_sensors[
-                        "house_load"
-                    ]["entity_id"]
-                    _LOGGER.info("Pattern-detected house load: %s", fallback_sensors["house_load"]["entity_id"])
+                    entity_id = fallback_sensors["house_load"]["entity_id"]
+                    self._detected_entities[CONF_HOUSE_LOAD_ENTITY] = entity_id
+                    sensor_info = self._classify_sensor(entity_id)
+                    _LOGGER.info(
+                        "⚠️  Pattern-detected house load: %s [%s, %s]",
+                        entity_id,
+                        sensor_info.get("type", "unknown"),
+                        sensor_info.get("unit", "unknown")
+                    )
 
-            _LOGGER.info("Auto-detection complete: %s", self._detected_entities)
+            # Validate detected sensors
+            _LOGGER.info("")
+            _LOGGER.info("STEP 7: Validating Detected Sensors")
+            _LOGGER.info("-" * 60)
+            await self._validate_detected_sensors()
+
+            # Summary
+            _LOGGER.info("")
+            _LOGGER.info("DETECTION SUMMARY")
+            _LOGGER.info("=" * 60)
+            
+            # Single sensors
+            detected_count = len([v for v in self._detected_entities.values() if v and isinstance(v, str)])
+            _LOGGER.info("Single sensors detected: %d", detected_count)
+            for key, value in self._detected_entities.items():
+                if value and isinstance(value, str):  # Skip lists for now
+                    sensor_info = self._classify_sensor(value)
+                    _LOGGER.info(
+                        "  %s: %s [%s]",
+                        key,
+                        value,
+                        sensor_info.get("type", "unknown")
+                    )
+            
+            # Multi-sensor lists
+            _LOGGER.info("")
+            _LOGGER.info("Multi-sensor lists:")
+            if self._detected_entities.get(CONF_SOLAR_SENSORS):
+                _LOGGER.info("  Solar sensors: %d", len(self._detected_entities[CONF_SOLAR_SENSORS]))
+                for sensor_id in self._detected_entities[CONF_SOLAR_SENSORS]:
+                    sensor_info = self._classify_sensor(sensor_id)
+                    _LOGGER.info("    - %s [%s]", sensor_id, sensor_info.get("type", "unknown"))
+            
+            if self._detected_entities.get(CONF_BATTERY_CHARGE_SENSORS):
+                _LOGGER.info("  Battery Charge sensors: %d", len(self._detected_entities[CONF_BATTERY_CHARGE_SENSORS]))
+                for sensor_id in self._detected_entities[CONF_BATTERY_CHARGE_SENSORS]:
+                    sensor_info = self._classify_sensor(sensor_id)
+                    _LOGGER.info("    - %s [%s]", sensor_id, sensor_info.get("type", "unknown"))
+            
+            if self._detected_entities.get(CONF_BATTERY_DISCHARGE_SENSORS):
+                _LOGGER.info("  Battery Discharge sensors: %d", len(self._detected_entities[CONF_BATTERY_DISCHARGE_SENSORS]))
+                for sensor_id in self._detected_entities[CONF_BATTERY_DISCHARGE_SENSORS]:
+                    sensor_info = self._classify_sensor(sensor_id)
+                    _LOGGER.info("    - %s [%s]", sensor_id, sensor_info.get("type", "unknown"))
+            
+            if self._detected_entities.get(CONF_GRID_IMPORT_SENSORS):
+                _LOGGER.info("  Grid Import sensors: %d", len(self._detected_entities[CONF_GRID_IMPORT_SENSORS]))
+                for sensor_id in self._detected_entities[CONF_GRID_IMPORT_SENSORS]:
+                    sensor_info = self._classify_sensor(sensor_id)
+                    _LOGGER.info("    - %s [%s]", sensor_id, sensor_info.get("type", "unknown"))
+            
+            if self._detected_entities.get(CONF_GRID_EXPORT_SENSORS):
+                _LOGGER.info("  Grid Export sensors: %d", len(self._detected_entities[CONF_GRID_EXPORT_SENSORS]))
+                for sensor_id in self._detected_entities[CONF_GRID_EXPORT_SENSORS]:
+                    sensor_info = self._classify_sensor(sensor_id)
+                    _LOGGER.info("    - %s [%s]", sensor_id, sensor_info.get("type", "unknown"))
+            
+            _LOGGER.info("=" * 60)
 
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Auto-detection failed")
 
-        # Move to review step
-        return await self.async_step_review()
+        # Move to device discovery step to show found devices
+        return await self.async_step_device_discovery()
+
+    async def async_step_device_discovery(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Show discovered devices and their sensors."""
+        if user_input is not None:
+            # User clicked Next, proceed to review
+            return await self.async_step_review()
+        
+        # Build description with discovered devices
+        description_parts = []
+        description_parts.append(f"Discovered {len(self._discovered_devices)} device(s):\n")
+        
+        for device in self._discovered_devices:
+            device_name = device["name"]
+            manufacturer = device.get("manufacturer", "Unknown")
+            model = device.get("model", "Unknown Model")
+            sensors = device.get("sensors", {})
+            
+            description_parts.append(f"\n**{device_name}**")
+            description_parts.append(f"└─ Manufacturer: {manufacturer}")
+            description_parts.append(f"└─ Model: {model}")
+            
+            # Show sensor counts
+            pv_count = len(sensors.get("all_pv_sensors", []))
+            if pv_count > 0:
+                description_parts.append(f"└─ PV Sensors: {pv_count}")
+                # Show preference for cumulative
+                cumulative_count = sum(1 for s in sensors.get("all_pv_sensors", []) if s.get("is_cumulative"))
+                if cumulative_count > 0:
+                    description_parts.append(f"   ├─ {cumulative_count} cumulative (kWh) ⭐")
+                if pv_count - cumulative_count > 0:
+                    description_parts.append(f"   └─ {pv_count - cumulative_count} instantaneous (kW)")
+            
+            if sensors.get("battery_soc"):
+                description_parts.append(f"└─ Battery SoC: {sensors['battery_soc']['entity_id']}")
+            
+            bat_charge_count = len(sensors.get("all_battery_charge_sensors", []))
+            if bat_charge_count > 0:
+                description_parts.append(f"└─ Battery Charge Sensors: {bat_charge_count}")
+            
+            bat_discharge_count = len(sensors.get("all_battery_discharge_sensors", []))
+            if bat_discharge_count > 0:
+                description_parts.append(f"└─ Battery Discharge Sensors: {bat_discharge_count}")
+            
+            grid_cons_count = len(sensors.get("all_grid_consumption_sensors", []))
+            if grid_cons_count > 0:
+                description_parts.append(f"└─ Grid Consumption Sensors: {grid_cons_count}")
+            
+            grid_feed_count = len(sensors.get("all_grid_feedin_sensors", []))
+            if grid_feed_count > 0:
+                description_parts.append(f"└─ Grid Feed-in Sensors: {grid_feed_count}")
+            
+            # Show control entities if found
+            control_ents = sensors.get("control_entities", {})
+            if control_ents:
+                description_parts.append(f"└─ Battery Control Entities:")
+                if control_ents.get(CONF_BATTERY_MODE_SELECT):
+                    description_parts.append(f"   ├─ Mode Select: ✅")
+                if control_ents.get(CONF_BATTERY_CHARGE_POWER):
+                    description_parts.append(f"   ├─ Charge Power: ✅")
+                if control_ents.get(CONF_BATTERY_DISCHARGE_POWER):
+                    description_parts.append(f"   └─ Discharge Power: ✅")
+        
+        description = "\n".join(description_parts)
+        
+        return self.async_show_form(
+            step_id="device_discovery",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "device_count": str(len(self._discovered_devices)),
+                "device_details": description,
+            },
+        )
 
     async def async_step_review(
         self, user_input: dict[str, Any] | None = None
@@ -248,50 +505,100 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # User confirmed or adjusted entity selections
-            self._detected_entities[CONF_BATTERY_SOC_ENTITY] = user_input.get(
-                CONF_BATTERY_SOC_ENTITY
-            )
-            self._detected_entities[CONF_SOLAR_POWER_ENTITY] = user_input.get(
-                CONF_SOLAR_POWER_ENTITY
-            )
-            self._detected_entities[CONF_HOUSE_LOAD_ENTITY] = user_input.get(
-                CONF_HOUSE_LOAD_ENTITY
-            )
+            # Handle user selections - check for custom entries (prioritize custom fields)
+            solar_production = user_input.get("solar_production_custom", "").strip() or user_input.get("solar_production")
+            battery_soc = user_input.get("battery_soc_custom", "").strip() or user_input.get("battery_soc")
+            grid_import = user_input.get("grid_import_custom", "").strip() or user_input.get("grid_import")
+            grid_export = user_input.get("grid_export_custom", "").strip() or user_input.get("grid_export")
             
-            # Check if user selected control entities for an unknown device
-            control_entities_selected = {}
-            if user_input.get(CONF_BATTERY_MODE_SELECT):
-                control_entities_selected[CONF_BATTERY_MODE_SELECT] = user_input[
-                    CONF_BATTERY_MODE_SELECT
-                ]
-            if user_input.get(CONF_BATTERY_CHARGE_POWER):
-                control_entities_selected[CONF_BATTERY_CHARGE_POWER] = user_input[
-                    CONF_BATTERY_CHARGE_POWER
-                ]
-            if user_input.get(CONF_BATTERY_DISCHARGE_POWER):
-                control_entities_selected[CONF_BATTERY_DISCHARGE_POWER] = user_input[
-                    CONF_BATTERY_DISCHARGE_POWER
-                ]
+            # Validate that all required sensors are provided
+            if not solar_production:
+                errors["solar_production"] = "Solar production sensor is required"
+            if not battery_soc:
+                errors["battery_soc"] = "Battery SoC sensor is required"
+            if not grid_import:
+                errors["grid_import"] = "Grid import sensor is required"
+            if not grid_export:
+                errors["grid_export"] = "Grid export sensor is required"
             
-            # Save learned device configuration if entities were manually selected
-            # TODO: Fix indentation issue in _save_learned_device method
-            # if self._device_info and control_entities_selected:
-            #     await self._save_learned_device(control_entities_selected)
-
-            # Create config entry
-            return self.async_create_entry(
-                title="intuiHEMS",
-                data={
-                    CONF_SERVICE_URL: self._service_url,
-                    CONF_API_KEY: self._api_key,
-                    CONF_UPDATE_INTERVAL: self._update_interval,
-                    CONF_DETECTED_ENTITIES: self._detected_entities,
-                },
-            )
+            # Validate entities exist
+            if not errors:
+                for sensor_id, field_name in [
+                    (solar_production, "solar_production"),
+                    (battery_soc, "battery_soc"),
+                    (grid_import, "grid_import"),
+                    (grid_export, "grid_export"),
+                ]:
+                    if sensor_id and not self.hass.states.get(sensor_id):
+                        # Check if custom field was used
+                        custom_field = f"{field_name}_custom"
+                        if user_input.get(custom_field):
+                            errors[custom_field] = f"Entity '{sensor_id}' not found in Home Assistant"
+                        else:
+                            errors[field_name] = f"Entity '{sensor_id}' not found in Home Assistant"
+            
+            if not errors:
+                # Store the final selected sensors
+                self._detected_entities[CONF_SOLAR_POWER_ENTITY] = solar_production
+                self._detected_entities[CONF_BATTERY_SOC_ENTITY] = battery_soc
+                self._detected_entities["grid_import_sensor"] = grid_import
+                self._detected_entities["grid_export_sensor"] = grid_export
+                
+                # Proceed to pricing configuration
+                return await self.async_step_pricing()
         
         # If no user input yet, show the review form with available sensors
         return await self._show_review_form()
+    
+    async def async_step_pricing(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure dynamic pricing."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            # Validate pricing inputs
+            epex_markup = user_input.get(CONF_EPEX_MARKUP, DEFAULT_EPEX_MARKUP)
+            grid_export_price = user_input.get(CONF_GRID_EXPORT_PRICE, DEFAULT_GRID_EXPORT_PRICE)
+            
+            try:
+                epex_markup = float(epex_markup)
+                if epex_markup < 0 or epex_markup > 1:
+                    errors[CONF_EPEX_MARKUP] = "Markup must be between 0 and 1 €/kWh"
+            except (ValueError, TypeError):
+                errors[CONF_EPEX_MARKUP] = "Invalid number format"
+            
+            try:
+                grid_export_price = float(grid_export_price)
+                if grid_export_price < 0 or grid_export_price > 1:
+                    errors[CONF_GRID_EXPORT_PRICE] = "Export price must be between 0 and 1 €/kWh"
+            except (ValueError, TypeError):
+                errors[CONF_GRID_EXPORT_PRICE] = "Invalid number format"
+            
+            if not errors:
+                # Store pricing configuration
+                self._detected_entities[CONF_EPEX_MARKUP] = epex_markup
+                self._detected_entities[CONF_GRID_EXPORT_PRICE] = grid_export_price
+                
+                # Create config entry (historic data backfill will happen on first run)
+                return self.async_create_entry(
+                    title="intuiHEMS",
+                    data={
+                        CONF_SERVICE_URL: self._service_url,
+                        CONF_API_KEY: self._api_key,
+                        CONF_UPDATE_INTERVAL: self._update_interval,
+                        CONF_DETECTED_ENTITIES: self._detected_entities,
+                    },
+                )
+        
+        return self.async_show_form(
+            step_id="pricing",
+            data_schema=vol.Schema({
+                vol.Required(CONF_EPEX_MARKUP, default=DEFAULT_EPEX_MARKUP): vol.Coerce(float),
+                vol.Required(CONF_GRID_EXPORT_PRICE, default=DEFAULT_GRID_EXPORT_PRICE): vol.Coerce(float),
+            }),
+            errors=errors,
+        )
 
     async def _save_learned_device(self, control_entities: dict[str, str]) -> None:
         """Save learned device configuration.
@@ -339,71 +646,104 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
     async def _show_review_form(self) -> config_entries.FlowResult:
-        """Show the review form with sensor selection."""
+        """Show the review & select form with recommended sensors."""
         entity_registry = er.async_get(self.hass)
         
-        # Battery SOC sensors (device_class=battery, unit=%)
-        soc_entities = {
-            entry.entity_id: f"{entry.entity_id} ({entry.original_name or entry.entity_id})"
-            for entry in entity_registry.entities.values()
-            if entry.domain == "sensor"
-            and not entry.disabled_by
-            and (
-                (entry.device_class == "battery" or "soc" in entry.entity_id.lower())
-                and self.hass.states.get(entry.entity_id)
-            )
-        }
-
-        # Power/Energy sensors (device_class=power OR energy, units kW/W/kWh/Wh)
-        power_entities = {}
-        for entry in entity_registry.entities.values():
-            if entry.domain != "sensor" or entry.disabled_by:
-                continue
-            state = self.hass.states.get(entry.entity_id)
-            if not state:
-                continue
-            unit = state.attributes.get("unit_of_measurement", "").lower()
-            device_class = entry.device_class
-            if device_class in ["power", "energy"] or unit in ["kw", "w", "kwh", "wh"]:
-                unit_display = state.attributes.get("unit_of_measurement", "")
-                power_entities[entry.entity_id] = (
-                    f"{entry.entity_id} [{unit_display}] ({entry.original_name or entry.entity_id})"
-                )
-
-        # Build schema with detected defaults
+        # Get all detected sensors for dropdowns
+        solar_sensors = self._detected_entities.get(CONF_SOLAR_SENSORS, [])
+        battery_charge = self._detected_entities.get(CONF_BATTERY_CHARGE_SENSORS, [])
+        battery_discharge = self._detected_entities.get(CONF_BATTERY_DISCHARGE_SENSORS, [])
+        grid_import = self._detected_entities.get(CONF_GRID_IMPORT_SENSORS, [])
+        grid_export = self._detected_entities.get(CONF_GRID_EXPORT_SENSORS, [])
+        battery_soc = self._detected_entities.get(CONF_BATTERY_SOC_ENTITY)
+        
+        # Pick recommended sensors (first cumulative one of each type)
+        recommended_solar = None
+        if solar_sensors:
+            # Prefer solar_energy_total, then other _total sensors
+            for sensor in solar_sensors:
+                if "solar_energy_total" in sensor.lower():
+                    recommended_solar = sensor
+                    break
+            # Fallback to any _total sensor
+            if not recommended_solar:
+                for sensor in solar_sensors:
+                    if "total" in sensor.lower() and "today" not in sensor.lower():
+                        recommended_solar = sensor
+                        break
+            if not recommended_solar:
+                recommended_solar = solar_sensors[0]
+        
+        recommended_grid_import = None
+        if grid_import:
+            for sensor in grid_import:
+                if "total" in sensor.lower() and "today" not in sensor.lower():
+                    recommended_grid_import = sensor
+                    break
+            if not recommended_grid_import:
+                recommended_grid_import = grid_import[0]
+        
+        recommended_grid_export = None
+        if grid_export:
+            for sensor in grid_export:
+                if "total" in sensor.lower() and "today" not in sensor.lower():
+                    recommended_grid_export = sensor
+                    break
+            if not recommended_grid_export:
+                recommended_grid_export = grid_export[0]
+        
+        # Build dropdown options with friendly names (including "or enter custom" option)
+        def build_selector_dict(sensor_list):
+            """Build a selector dict from sensor list."""
+            selector_dict = {}
+            for sensor_id in sensor_list:
+                state = self.hass.states.get(sensor_id)
+                if state:
+                    unit = state.attributes.get("unit_of_measurement", "")
+                    selector_dict[sensor_id] = f"{sensor_id} ({unit})"
+                else:
+                    selector_dict[sensor_id] = sensor_id
+            return selector_dict
+        
+        # Build the schema
         schema = {}
-
-        if soc_entities:
-            default_soc = self._detected_entities.get(CONF_BATTERY_SOC_ENTITY)
-            if default_soc and default_soc in soc_entities:
-                schema[vol.Required(CONF_BATTERY_SOC_ENTITY, default=default_soc)] = vol.In(soc_entities)
-            else:
-                schema[vol.Optional(CONF_BATTERY_SOC_ENTITY)] = vol.In(soc_entities)
-
-        if power_entities:
-            default_solar = self._detected_entities.get(CONF_SOLAR_POWER_ENTITY)
-            if default_solar and default_solar in power_entities:
-                schema[vol.Optional(CONF_SOLAR_POWER_ENTITY, default=default_solar)] = vol.In(power_entities)
-            else:
-                schema[vol.Optional(CONF_SOLAR_POWER_ENTITY)] = vol.In(power_entities)
-
-            default_load = self._detected_entities.get(CONF_HOUSE_LOAD_ENTITY)
-            if default_load and default_load in power_entities:
-                schema[vol.Optional(CONF_HOUSE_LOAD_ENTITY, default=default_load)] = vol.In(power_entities)
-            else:
-                schema[vol.Optional(CONF_HOUSE_LOAD_ENTITY)] = vol.In(power_entities)
-
-        description_placeholders = {}
-        if self._detected_entities:
-            description_placeholders["detected_count"] = str(
-                len([v for v in self._detected_entities.values() if v])
-            )
-
+        
+        # Solar production (required)
+        if solar_sensors:
+            solar_options = build_selector_dict(solar_sensors)
+            schema[vol.Required("solar_production", default=recommended_solar)] = vol.In(solar_options)
+            schema[vol.Optional("solar_production_custom", description="Or enter custom entity ID")] = str
+        
+        # Battery SoC (required)
+        if battery_soc:
+            # Get all SoC sensors for dropdown
+            soc_entities = {}
+            for entry in entity_registry.entities.values():
+                if (entry.domain == "sensor"
+                    and not entry.disabled_by
+                    and (entry.device_class == "battery" or "soc" in entry.entity_id.lower())
+                    and self.hass.states.get(entry.entity_id)):
+                    soc_entities[entry.entity_id] = f"{entry.entity_id} ({entry.original_name or entry.entity_id})"
+            
+            schema[vol.Required("battery_soc", default=battery_soc)] = vol.In(soc_entities)
+            schema[vol.Optional("battery_soc_custom", description="Or enter custom entity ID")] = str
+        
+        # Grid import (required)
+        if grid_import:
+            grid_import_options = build_selector_dict(grid_import)
+            schema[vol.Required("grid_import", default=recommended_grid_import)] = vol.In(grid_import_options)
+            schema[vol.Optional("grid_import_custom", description="Or enter custom entity ID")] = str
+        
+        # Grid export (required)
+        if grid_export:
+            grid_export_options = build_selector_dict(grid_export)
+            schema[vol.Required("grid_export", default=recommended_grid_export)] = vol.In(grid_export_options)
+            schema[vol.Optional("grid_export_custom", description="Or enter custom entity ID")] = str
+        
         return self.async_show_form(
             step_id="review",
             data_schema=vol.Schema(schema),
             errors={},
-            description_placeholders=description_placeholders,
         )
 
     async def _get_energy_prefs(self) -> dict[str, Any] | None:
@@ -499,7 +839,11 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return devices
 
     async def _find_power_sensors(self, device_id: str) -> dict[str, Any]:
-        """Find relevant power sensors and control entities on a device."""
+        """Find relevant power/energy sensors and control entities on a device.
+        
+        Priority: Cumulative energy sensors (_total, total_increasing) over instantaneous power.
+        Collects ALL sensors of each type for multi-sensor support.
+        """
         entity_registry = er.async_get(self.hass)
         device_registry = dr.async_get(self.hass)
 
@@ -525,13 +869,14 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entity_registry, device_id, include_disabled_entities=False
         )
 
-        candidates = {
-            "solar_power": None,
-            "battery_soc": None,
-            "house_load": None,
-            "device_info": device_info,
-            "control_entities": control_entities,
-        }
+        # Collect ALL sensors (not just first match)
+        pv_sensors = []  # All PV/solar sensors
+        battery_charge_sensors = []  # Battery charge energy
+        battery_discharge_sensors = []  # Battery discharge energy
+        grid_consumption_sensors = []  # Grid import
+        grid_feedin_sensors = []  # Grid export
+        battery_soc_sensor = None  # Only one SoC needed
+        house_load_sensor = None  # House consumption
 
         for entry in device_entities:
             if entry.domain != "sensor":
@@ -542,40 +887,91 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 continue
 
             attrs = state.attributes
+            entity_lower = entry.entity_id.lower()
+            unit = attrs.get("unit_of_measurement", "").lower()
+            device_class = attrs.get("device_class")
+            state_class = attrs.get("state_class")
+            
+            # Determine if cumulative (prefer these)
+            is_cumulative = (
+                device_class == "energy" or
+                state_class == "total_increasing" or
+                unit in ["kwh", "wh"] or
+                "total" in entity_lower
+            )
+            
+            sensor_info = {
+                "entity_id": entry.entity_id,
+                "name": attrs.get("friendly_name", entry.entity_id),
+                "unit": unit,
+                "is_cumulative": is_cumulative,
+                "device_class": device_class,
+                "state_class": state_class,
+            }
 
-            # Battery SOC (%)
-            if (
-                attrs.get("device_class") == "battery"
-                or "soc" in entry.entity_id.lower()
-            ) and attrs.get("unit_of_measurement") == "%":
-                if not candidates["battery_soc"]:
-                    candidates["battery_soc"] = {
-                        "entity_id": entry.entity_id,
-                        "name": attrs.get("friendly_name", entry.entity_id),
-                        "confidence": "high",
-                    }
+            # Battery SOC (%) - only need one
+            if (device_class == "battery" or "soc" in entity_lower) and unit == "%":
+                if not battery_soc_sensor:
+                    battery_soc_sensor = sensor_info
+                    _LOGGER.debug("   Found Battery SoC: %s", entry.entity_id)
 
-            # Solar power (kW or W)
-            elif attrs.get("device_class") == "power" and any(
-                x in entry.entity_id.lower() for x in ["pv", "solar", "photovoltaic"]
-            ):
-                if not candidates["solar_power"]:
-                    candidates["solar_power"] = {
-                        "entity_id": entry.entity_id,
-                        "name": attrs.get("friendly_name", entry.entity_id),
-                        "confidence": "high",
-                    }
+            # PV/Solar sensors - collect ALL (pv1, pv2, etc.)
+            elif any(x in entity_lower for x in ["pv", "solar"]) and not any(x in entity_lower for x in ["battery", "grid"]):
+                # Prefer cumulative (_total, _energy_total)
+                if is_cumulative or device_class in ["energy", "power"]:
+                    pv_sensors.append(sensor_info)
+                    _LOGGER.debug("   Found PV sensor: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
 
-            # House load (kW)
-            elif attrs.get("device_class") == "power" and any(
-                x in entry.entity_id.lower() for x in ["house", "load", "consumption"]
-            ):
-                if not candidates["house_load"]:
-                    candidates["house_load"] = {
-                        "entity_id": entry.entity_id,
-                        "name": attrs.get("friendly_name", entry.entity_id),
-                        "confidence": "medium",
-                    }
+            # Battery charge sensors
+            elif any(x in entity_lower for x in ["battery_charge", "bat_charge"]) and "discharge" not in entity_lower:
+                if is_cumulative or device_class in ["energy", "power"]:
+                    battery_charge_sensors.append(sensor_info)
+                    _LOGGER.debug("   Found Battery Charge: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
+
+            # Battery discharge sensors
+            elif any(x in entity_lower for x in ["battery_discharge", "bat_discharge"]):
+                if is_cumulative or device_class in ["energy", "power"]:
+                    battery_discharge_sensors.append(sensor_info)
+                    _LOGGER.debug("   Found Battery Discharge: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
+
+            # Grid consumption (import from grid)
+            elif any(x in entity_lower for x in ["grid_consumption", "meter_consumption", "import"]) and "export" not in entity_lower:
+                if is_cumulative or device_class in ["energy", "power"]:
+                    grid_consumption_sensors.append(sensor_info)
+                    _LOGGER.debug("   Found Grid Consumption: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
+
+            # Grid feed-in (export to grid)
+            elif any(x in entity_lower for x in ["feed_in", "feedin", "grid_export", "export"]):
+                if is_cumulative or device_class in ["energy", "power"]:
+                    grid_feedin_sensors.append(sensor_info)
+                    _LOGGER.debug("   Found Grid Feed-in: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
+
+            # House load/consumption
+            elif any(x in entity_lower for x in ["house", "load", "home"]) and "grid" not in entity_lower:
+                if device_class in ["energy", "power"] and not house_load_sensor:
+                    house_load_sensor = sensor_info
+                    _LOGGER.debug("   Found House Load: %s [%s]", entry.entity_id, "cumulative" if is_cumulative else "instantaneous")
+
+        # Sort each list to prefer cumulative sensors
+        pv_sensors.sort(key=lambda x: (not x["is_cumulative"], x["entity_id"]))
+        battery_charge_sensors.sort(key=lambda x: (not x["is_cumulative"], x["entity_id"]))
+        battery_discharge_sensors.sort(key=lambda x: (not x["is_cumulative"], x["entity_id"]))
+        grid_consumption_sensors.sort(key=lambda x: (not x["is_cumulative"], x["entity_id"]))
+        grid_feedin_sensors.sort(key=lambda x: (not x["is_cumulative"], x["entity_id"]))
+
+        candidates = {
+            "solar_power": pv_sensors[0] if pv_sensors else None,  # First (best) PV sensor for backward compat
+            "battery_soc": battery_soc_sensor,
+            "house_load": house_load_sensor,
+            "device_info": device_info,
+            "control_entities": control_entities,
+            # NEW: Multi-sensor support
+            "all_pv_sensors": pv_sensors,
+            "all_battery_charge_sensors": battery_charge_sensors,
+            "all_battery_discharge_sensors": battery_discharge_sensors,
+            "all_grid_consumption_sensors": grid_consumption_sensors,
+            "all_grid_feedin_sensors": grid_feedin_sensors,
+        }
 
         # If we have device info, try to detect battery control entities
         if device and device_info:
@@ -657,6 +1053,163 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
 
         return candidates
+
+    def _classify_sensor(self, entity_id: str) -> dict[str, Any]:
+        """Classify sensor as cumulative or instantaneous.
+        
+        Args:
+            entity_id: Entity ID to classify
+            
+        Returns:
+            Dictionary with sensor classification:
+                - type: "cumulative" or "instantaneous" or "unknown"
+                - unit: Unit of measurement
+                - device_class: Device class
+                - state_class: State class
+                - confidence: "high" or "medium" or "low"
+                - note: Human-readable description
+        """
+        state = self.hass.states.get(entity_id)
+        if not state:
+            return {
+                "type": "unknown",
+                "unit": None,
+                "device_class": None,
+                "state_class": None,
+                "confidence": "low",
+                "note": "Entity not found"
+            }
+        
+        unit = state.attributes.get("unit_of_measurement", "").lower()
+        device_class = state.attributes.get("device_class")
+        state_class = state.attributes.get("state_class")
+        
+        # Cumulative (preferred for reliability)
+        is_cumulative = (
+            unit in ["kwh", "wh", "mwh"] or
+            device_class == "energy" or
+            state_class == "total_increasing"
+        )
+        
+        # Instantaneous (acceptable)
+        is_instantaneous = (
+            unit in ["kw", "w", "mw"] or
+            device_class == "power" or
+            state_class == "measurement"
+        )
+        
+        if is_cumulative:
+            return {
+                "type": "cumulative",
+                "unit": unit,
+                "device_class": device_class,
+                "state_class": state_class,
+                "confidence": "high",
+                "note": "Cumulative energy - backend will compute power derivative"
+            }
+        elif is_instantaneous:
+            return {
+                "type": "instantaneous",
+                "unit": unit,
+                "device_class": device_class,
+                "state_class": state_class,
+                "confidence": "medium",
+                "note": "Instantaneous power reading"
+            }
+        else:
+            return {
+                "type": "unknown",
+                "unit": unit,
+                "device_class": device_class,
+                "state_class": state_class,
+                "confidence": "low",
+                "note": f"Unknown sensor type (unit={unit})"
+            }
+
+    async def _validate_sensor(self, entity_id: str) -> dict[str, Any]:
+        """Validate sensor has valid, recent data.
+        
+        Args:
+            entity_id: Entity ID to validate
+            
+        Returns:
+            Dictionary with validation results:
+                - valid: True if sensor is valid
+                - issue: Description of issue if not valid
+                - current_value: Current sensor value
+                - unit: Unit of measurement
+                - last_updated: Last update timestamp
+                - age_seconds: Age of last update in seconds
+        """
+        from homeassistant.util import dt as dt_util
+        
+        state = self.hass.states.get(entity_id)
+        
+        # Check 1: Entity exists
+        if not state:
+            return {"valid": False, "issue": "entity_not_found"}
+        
+        # Check 2: Available
+        if state.state in ["unavailable", "unknown"]:
+            return {"valid": False, "issue": "currently_unavailable", "state": state.state}
+        
+        # Check 3: Numeric value
+        try:
+            value = float(state.state)
+        except (ValueError, TypeError):
+            return {"valid": False, "issue": "non_numeric_state", "state": state.state}
+        
+        # Check 4: Recent data (< 10 min old)
+        now = dt_util.utcnow()
+        age_seconds = (now - state.last_updated).total_seconds()
+        if age_seconds > 600:
+            return {
+                "valid": False,
+                "issue": "stale_data",
+                "age_minutes": int(age_seconds / 60),
+                "last_updated": state.last_updated
+            }
+        
+        # Check 5: Unit of measurement exists
+        unit = state.attributes.get("unit_of_measurement")
+        if not unit:
+            return {"valid": False, "issue": "no_unit"}
+        
+        return {
+            "valid": True,
+            "current_value": value,
+            "unit": unit,
+            "last_updated": state.last_updated,
+            "age_seconds": int(age_seconds),
+        }
+
+    async def _validate_detected_sensors(self) -> None:
+        """Validate all detected sensors and log results."""
+        for key, value in self._detected_entities.items():
+            if not value:
+                continue
+            
+            # Skip list values (multi-sensor lists)
+            if isinstance(value, list):
+                continue
+            
+            # Validate single entity_id
+            if isinstance(value, str):
+                validation = await self._validate_sensor(value)
+                if validation["valid"]:
+                    _LOGGER.info(
+                        "  ✅ %s: Valid (value=%.2f %s, age=%ds)",
+                        key,
+                        validation["current_value"],
+                        validation["unit"],
+                        validation["age_seconds"]
+                    )
+                else:
+                    _LOGGER.warning(
+                        "  ⚠️  %s: %s",
+                        key,
+                        validation["issue"]
+                    )
 
     def _detect_battery_control_entities(
         self,

@@ -56,6 +56,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.entry = entry
         self._sensors_registered = False
+        self._historic_data_sent = False  # Track if historic backfill completed
 
         _LOGGER.info(
             "IntuiTherm coordinator initialized (service: %s, interval: %s)",
@@ -72,6 +73,11 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             if not self._sensors_registered and self.entry:
                 await self._register_sensors()
                 self._sensors_registered = True
+            
+            # Backfill historic data on first run
+            if not self._historic_data_sent and self.entry:
+                await self._backfill_historic_data()
+                self._historic_data_sent = True
 
             # Send sensor readings
             if self.entry:
@@ -289,3 +295,140 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                     except Exception as err:
                         _LOGGER.debug("Failed to send reading for %s: %s", entity_id, err)
 
+    async def _backfill_historic_data(self) -> None:
+        """Backfill up to 7 days of historic sensor data on first run."""
+        from homeassistant.components.recorder import get_instance
+        from homeassistant.components.recorder.history import state_changes_during_period
+        
+        _LOGGER.info("Starting historic data backfill (up to 7 days)")
+        
+        try:
+            # Get recorder instance
+            recorder = get_instance(self.hass)
+            if not recorder:
+                _LOGGER.warning("Recorder not available, skipping historic backfill")
+                return
+            
+            config = {**self.entry.data, **self.entry.options}
+            
+            # Calculate time range (7 days back)
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(days=7)
+            
+            # Collect all entity IDs to backfill
+            entities_to_backfill = []
+            
+            # Solar sensors
+            for sensor_id in config.get(CONF_SOLAR_SENSORS, []):
+                entities_to_backfill.append((sensor_id, "solar"))
+            
+            # Battery SoC
+            if battery_soc := config.get(CONF_BATTERY_SOC_ENTITY):
+                entities_to_backfill.append((battery_soc, "soc"))
+            
+            # Battery charge/discharge
+            for sensor_id in config.get(CONF_BATTERY_CHARGE_SENSORS, []):
+                entities_to_backfill.append((sensor_id, "soc"))
+            for sensor_id in config.get(CONF_BATTERY_DISCHARGE_SENSORS, []):
+                entities_to_backfill.append((sensor_id, "soc"))
+            
+            # Grid import/export  
+            for sensor_id in config.get(CONF_GRID_IMPORT_SENSORS, []):
+                entities_to_backfill.append((sensor_id, "load"))
+            for sensor_id in config.get(CONF_GRID_EXPORT_SENSORS, []):
+                entities_to_backfill.append((sensor_id, "load"))
+            
+            if not entities_to_backfill:
+                _LOGGER.warning("No entities configured for backfill")
+                return
+            
+            _LOGGER.info(
+                "Backfilling %d sensors from %s to %s",
+                len(entities_to_backfill),
+                start_time.isoformat(),
+                end_time.isoformat()
+            )
+            
+            # Query historic data for all entities
+            entity_ids = [entity_id for entity_id, _ in entities_to_backfill]
+            
+            history_data = await recorder.async_add_executor_job(
+                state_changes_during_period,
+                self.hass,
+                start_time,
+                end_time,
+                None,  # entity_id filter
+                False,  # no_attributes
+                False,  # descending
+                False,  # limit
+                entity_ids
+            )
+            
+            if not history_data:
+                _LOGGER.warning("No historic data found for sensors")
+                return
+            
+            # Create entity_id to sensor_type mapping
+            sensor_type_map = {entity_id: sensor_type for entity_id, sensor_type in entities_to_backfill}
+            
+            # Send historic data to backend
+            total_readings = 0
+            for entity_id, states in history_data.items():
+                sensor_type = sensor_type_map.get(entity_id)
+                if not sensor_type:
+                    continue
+                
+                # Convert states to readings
+                readings = []
+                for state in states:
+                    try:
+                        if state.state in ("unknown", "unavailable", None):
+                            continue
+                        value = float(state.state)
+                        timestamp = state.last_changed or state.last_updated
+                        readings.append({
+                            "timestamp": timestamp.isoformat(),
+                            "value": value,
+                        })
+                    except (ValueError, TypeError, AttributeError):
+                        continue
+                
+                if not readings:
+                    continue
+                
+                # Send in batches of 500 to avoid overloading the API
+                batch_size = 500
+                for i in range(0, len(readings), batch_size):
+                    batch = readings[i:i + batch_size]
+                    try:
+                        await self._post_json(
+                            "/api/v1/sensors/data",
+                            data={
+                                "sensor_type": sensor_type,
+                                "entity_id": entity_id,
+                                "readings": batch,
+                            }
+                        )
+                        total_readings += len(batch)
+                        _LOGGER.debug(
+                            "Sent %d historic readings for %s (%s)",
+                            len(batch),
+                            entity_id,
+                            sensor_type
+                        )
+                    except Exception as err:
+                        _LOGGER.warning(
+                            "Failed to send historic batch for %s: %s",
+                            entity_id,
+                            err
+                        )
+            
+            _LOGGER.info(
+                "Historic backfill complete: sent %d readings across %d sensors",
+                total_readings,
+                len(history_data)
+            )
+            
+        except Exception as err:
+            _LOGGER.error("Historic backfill failed: %s", err, exc_info=True)
+            # Don't raise - backfill failure shouldn't prevent integration from working

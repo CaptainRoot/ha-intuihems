@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "intuitherm"
 
 # Version
-VERSION: Final = "2025.11.10.4"
+VERSION: Final = "2025.11.10.6"
 
 # Platforms
 PLATFORMS: Final = ["sensor", "switch"]
@@ -36,9 +36,15 @@ CONF_BATTERY_DISCHARGE_POWER: Final = "battery_discharge_power"  # Battery disch
 # House load configuration
 CONF_HOUSE_LOAD_CALC_MODE: Final = "house_load_calc_mode"  # "auto" or "manual"
 
+# Pricing configuration
+CONF_EPEX_MARKUP: Final = "epex_markup"  # Additional cost on top of EPEX day-ahead price (€/kWh)
+CONF_GRID_EXPORT_PRICE: Final = "grid_export_price"  # Feed-in tariff (€/kWh)
+
 # Default values
 DEFAULT_SERVICE_URL: Final = "http://128.140.44.143:80"
 DEFAULT_UPDATE_INTERVAL: Final = 60  # seconds
+DEFAULT_EPEX_MARKUP: Final = 0.10  # €0.10/kWh markup
+DEFAULT_GRID_EXPORT_PRICE: Final = 0.08  # €0.08/kWh feed-in tariff
 
 # Service endpoints
 ENDPOINT_HEALTH: Final = "/api/v1/health"
