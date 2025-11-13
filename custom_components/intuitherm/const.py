@@ -40,6 +40,9 @@ CONF_HOUSE_LOAD_CALC_MODE: Final = "house_load_calc_mode"  # "auto" or "manual"
 CONF_EPEX_MARKUP: Final = "epex_markup"  # Additional cost on top of EPEX day-ahead price (€/kWh)
 CONF_GRID_EXPORT_PRICE: Final = "grid_export_price"  # Feed-in tariff (€/kWh)
 
+# Control mode configuration
+CONF_DRY_RUN_MODE: Final = "dry_run_mode"  # Test mode - MPC runs but doesn't send battery commands
+
 # Default values
 DEFAULT_SERVICE_URL: Final = "http://128.140.44.143:80"
 DEFAULT_UPDATE_INTERVAL: Final = 60  # seconds
@@ -73,6 +76,7 @@ SENSOR_TYPE_CONTROL_MODE: Final = "control_mode"
 SENSOR_TYPE_MPC_SUCCESS_RATE: Final = "mpc_success_rate"
 SENSOR_TYPE_MPC_SOLVE_TIME: Final = "mpc_solve_time"
 SENSOR_TYPE_MPC_RUNS_24H: Final = "mpc_runs_24h"
+SENSOR_TYPE_DRY_RUN_MODE: Final = "dry_run_mode"
 
 # Switch types
 SWITCH_TYPE_AUTO_CONTROL: Final = "automatic_control"

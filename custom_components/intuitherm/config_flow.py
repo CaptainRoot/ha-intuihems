@@ -34,6 +34,7 @@ from .const import (
     CONF_HOUSE_LOAD_CALC_MODE,
     CONF_EPEX_MARKUP,
     CONF_GRID_EXPORT_PRICE,
+    CONF_DRY_RUN_MODE,
     DEFAULT_SERVICE_URL,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_EPEX_MARKUP,
@@ -553,13 +554,14 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_pricing(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure dynamic pricing."""
+        """Configure dynamic pricing and control mode."""
         errors: dict[str, str] = {}
         
         if user_input is not None:
             # Validate pricing inputs
             epex_markup = user_input.get(CONF_EPEX_MARKUP, DEFAULT_EPEX_MARKUP)
             grid_export_price = user_input.get(CONF_GRID_EXPORT_PRICE, DEFAULT_GRID_EXPORT_PRICE)
+            dry_run_mode = user_input.get(CONF_DRY_RUN_MODE, False)
             
             try:
                 epex_markup = float(epex_markup)
@@ -576,9 +578,15 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_GRID_EXPORT_PRICE] = "Invalid number format"
             
             if not errors:
-                # Store pricing configuration
+                # Store pricing and control mode configuration
                 self._detected_entities[CONF_EPEX_MARKUP] = epex_markup
                 self._detected_entities[CONF_GRID_EXPORT_PRICE] = grid_export_price
+                self._detected_entities[CONF_DRY_RUN_MODE] = dry_run_mode
+                
+                _LOGGER.info(
+                    "Pricing configured: markup=%.3f€/kWh, export=%.3f€/kWh, dry_run=%s",
+                    epex_markup, grid_export_price, dry_run_mode
+                )
                 
                 # Create config entry (historic data backfill will happen on first run)
                 return self.async_create_entry(
@@ -596,8 +604,12 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_EPEX_MARKUP, default=DEFAULT_EPEX_MARKUP): vol.Coerce(float),
                 vol.Required(CONF_GRID_EXPORT_PRICE, default=DEFAULT_GRID_EXPORT_PRICE): vol.Coerce(float),
+                vol.Optional(CONF_DRY_RUN_MODE, default=False): bool,
             }),
             errors=errors,
+            description_placeholders={
+                "dry_run_info": "Enable test mode to run optimization without sending commands to your battery. Perfect for testing!"
+            },
         )
 
     async def _save_learned_device(self, control_entities: dict[str, str]) -> None:

@@ -39,15 +39,15 @@ async def async_setup_entry(
 
 
 class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
-    """Switch to enable/disable automatic battery control."""
+    """Master switch to enable/disable the entire optimization system."""
 
     def __init__(
         self, coordinator: IntuiThermCoordinator, entry: ConfigEntry
     ) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
-        self._attr_name = "IntuiTherm Automatic Control"
-        self._attr_icon = "mdi:robot"
+        self._attr_name = "IntuiTherm Master Switch"
+        self._attr_icon = "mdi:power"
         self._attr_unique_id = f"{entry.entry_id}_{SWITCH_TYPE_AUTO_CONTROL}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
@@ -56,6 +56,7 @@ class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
             "model": "Battery Optimization Service",
             "sw_version": "1.0",
         }
+        self._attr_entity_category = None  # Show prominently in controls
 
     @property
     def is_on(self) -> bool:
@@ -104,37 +105,37 @@ class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on automatic control."""
-        _LOGGER.info("Enabling IntuiTherm automatic control")
+        """Turn on the master switch (enable optimization system)."""
+        _LOGGER.info("Enabling IntuiTherm master switch - optimization system ON")
 
         result = await self.coordinator.async_enable_auto_control()
 
         if result.get("status") != "success":
             _LOGGER.error(
-                "Failed to enable automatic control: %s", result.get("detail")
+                "Failed to enable master switch: %s", result.get("detail")
             )
             # Still refresh to show current state
             await self.coordinator.async_request_refresh()
             return
 
-        _LOGGER.info("Automatic control enabled successfully")
+        _LOGGER.info("Optimization system enabled successfully")
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off automatic control."""
-        _LOGGER.info("Disabling IntuiTherm automatic control")
+        """Turn off the master switch (disable optimization system)."""
+        _LOGGER.info("Disabling IntuiTherm master switch - optimization system OFF")
 
         result = await self.coordinator.async_disable_auto_control()
 
         if result.get("status") != "success":
             _LOGGER.error(
-                "Failed to disable automatic control: %s", result.get("detail")
+                "Failed to disable master switch: %s", result.get("detail")
             )
             # Still refresh to show current state
             await self.coordinator.async_request_refresh()
             return
 
-        _LOGGER.info("Automatic control disabled successfully")
+        _LOGGER.info("Optimization system disabled successfully")
         await self.coordinator.async_request_refresh()
 
     @property

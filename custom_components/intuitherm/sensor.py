@@ -25,6 +25,9 @@ from .const import (
     SENSOR_TYPE_MPC_SUCCESS_RATE,
     SENSOR_TYPE_MPC_SOLVE_TIME,
     SENSOR_TYPE_MPC_RUNS_24H,
+    SENSOR_TYPE_DRY_RUN_MODE,
+    CONF_DETECTED_ENTITIES,
+    CONF_DRY_RUN_MODE,
     ATTR_MODE,
     ATTR_REASON,
     ATTR_NEXT_REVIEW,
@@ -54,6 +57,7 @@ async def async_setup_entry(
         IntuiThermMPCSuccessRateSensor(coordinator, entry),
         IntuiThermMPCSolveTimeSensor(coordinator, entry),
         IntuiThermMPCRuns24hSensor(coordinator, entry),
+        IntuiThermDryRunModeSensor(coordinator, entry),
     ]
 
     async_add_entities(sensors)
@@ -444,4 +448,55 @@ class IntuiThermMPCRuns24hSensor(IntuiThermSensorBase):
         attrs["period"] = "1 hour (displaying)"
         attrs["note"] = "24h tracking not yet implemented"
 
+        return attrs
+
+
+class IntuiThermDryRunModeSensor(IntuiThermSensorBase):
+    """Sensor showing if test/dry-run mode is active."""
+
+    def __init__(self, coordinator: IntuiThermCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SENSOR_TYPE_DRY_RUN_MODE,
+            "IntuiTherm Test Mode",
+            "mdi:test-tube",
+        )
+        self._entry = entry
+
+    @property
+    def native_value(self) -> str:
+        """Return test mode status."""
+        # Get dry_run_mode from config
+        config = {**self._entry.data, **self._entry.options}
+        detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
+        dry_run_mode = detected_entities.get(CONF_DRY_RUN_MODE, False)
+        
+        return "Active" if dry_run_mode else "Disabled"
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on state."""
+        config = {**self._entry.data, **self._entry.options}
+        detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
+        dry_run_mode = detected_entities.get(CONF_DRY_RUN_MODE, False)
+        
+        return "mdi:flask" if dry_run_mode else "mdi:flask-empty-off"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        config = {**self._entry.data, **self._entry.options}
+        detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
+        dry_run_mode = detected_entities.get(CONF_DRY_RUN_MODE, False)
+        
+        attrs = {
+            "description": "Test mode - MPC runs but doesn't control battery" if dry_run_mode else "Normal mode - battery control enabled",
+            "commands_executed": not dry_run_mode,
+        }
+        
+        if dry_run_mode:
+            attrs["warning"] = "Battery is NOT being controlled - for testing only"
+        
         return attrs
