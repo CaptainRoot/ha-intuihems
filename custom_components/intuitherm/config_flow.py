@@ -509,6 +509,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Handle user selections - check for custom entries (prioritize custom fields)
             solar_production = user_input.get("solar_production_custom", "").strip() or user_input.get("solar_production")
             battery_soc = user_input.get("battery_soc_custom", "").strip() or user_input.get("battery_soc")
+            battery_charge = user_input.get("battery_charge_custom", "").strip() or user_input.get("battery_charge")
+            battery_discharge = user_input.get("battery_discharge_custom", "").strip() or user_input.get("battery_discharge")
             grid_import = user_input.get("grid_import_custom", "").strip() or user_input.get("grid_import")
             grid_export = user_input.get("grid_export_custom", "").strip() or user_input.get("grid_export")
             
@@ -517,6 +519,10 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["solar_production"] = "Solar production sensor is required"
             if not battery_soc:
                 errors["battery_soc"] = "Battery SoC sensor is required"
+            if not battery_charge:
+                errors["battery_charge"] = "Battery charge sensor is required"
+            if not battery_discharge:
+                errors["battery_discharge"] = "Battery discharge sensor is required"
             if not grid_import:
                 errors["grid_import"] = "Grid import sensor is required"
             if not grid_export:
@@ -527,6 +533,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 for sensor_id, field_name in [
                     (solar_production, "solar_production"),
                     (battery_soc, "battery_soc"),
+                    (battery_charge, "battery_charge"),
+                    (battery_discharge, "battery_discharge"),
                     (grid_import, "grid_import"),
                     (grid_export, "grid_export"),
                 ]:
@@ -542,6 +550,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Store the final selected sensors
                 self._detected_entities[CONF_SOLAR_POWER_ENTITY] = solar_production
                 self._detected_entities[CONF_BATTERY_SOC_ENTITY] = battery_soc
+                self._detected_entities["battery_charge_sensor"] = battery_charge
+                self._detected_entities["battery_discharge_sensor"] = battery_discharge
                 self._detected_entities["grid_import_sensor"] = grid_import
                 self._detected_entities["grid_export_sensor"] = grid_export
                 
@@ -704,6 +714,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not recommended_grid_export:
                 recommended_grid_export = grid_export[0]
         
+        recommended_battery_charge = battery_charge[0] if battery_charge else None
+        recommended_battery_discharge = battery_discharge[0] if battery_discharge else None
+        
         # Build dropdown options with friendly names (including "or enter custom" option)
         def build_selector_dict(sensor_list):
             """Build a selector dict from sensor list."""
@@ -739,6 +752,18 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             schema[vol.Required("battery_soc", default=battery_soc)] = vol.In(soc_entities)
             schema[vol.Optional("battery_soc_custom", description="Or enter custom entity ID")] = str
+        
+        # Battery charge (required - energy going INTO battery)
+        if battery_charge:
+            battery_charge_options = build_selector_dict(battery_charge)
+            schema[vol.Required("battery_charge", default=recommended_battery_charge)] = vol.In(battery_charge_options)
+            schema[vol.Optional("battery_charge_custom", description="Or enter custom entity ID")] = str
+        
+        # Battery discharge (required - energy coming OUT of battery)
+        if battery_discharge:
+            battery_discharge_options = build_selector_dict(battery_discharge)
+            schema[vol.Required("battery_discharge", default=recommended_battery_discharge)] = vol.In(battery_discharge_options)
+            schema[vol.Optional("battery_discharge_custom", description="Or enter custom entity ID")] = str
         
         # Grid import (required)
         if grid_import:
