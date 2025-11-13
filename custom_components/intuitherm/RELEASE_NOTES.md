@@ -1,93 +1,156 @@
-# Release v2025.11.9 - Device Learning System
+# Release Notes - v2025.11.13.1
 
-## 🎉 Major Features
+## 🎉 Major Feature: Live Forecast Dashboard
 
-### Device-Based Auto-Detection
-Automatically detects battery control entities for major inverter brands:
-- ✅ **FoxESS** (verified from production)
-- ✅ **Solis**
-- ✅ **Huawei**
-- ✅ **SolarEdge**
-- ✅ **Growatt**
+This release adds **5 new forecast sensors** that enable real-time visualization of your system's next 24 hours!
 
-### Community Device Learning
-- 📚 Local storage of learned device configurations
-- 🌍 Optional community sharing for pattern matching
-- 📊 Success rate tracking
-- 🔒 Privacy-first: only patterns shared, not entity IDs
+### New Sensors
 
-### Simplified Setup Flow
-- 🎯 Version display on welcome screen
-- ⚙️ Hard-coded service URL and API key for alpha testing
-- 🚀 Zero-configuration for supported inverters
-- 📱 Streamlined user experience
+Each sensor provides 96 data points (15-minute intervals over 24 hours):
 
-## 🔧 Technical Improvements
+1. **Consumption Forecast** (`sensor.intuihems_consumption_forecast`)
+   - Predicted house consumption in kW
+   - Learn your daily patterns
+   - See upcoming high-load periods
 
-### Home Assistant Services
-- `intuitherm.list_learned_devices` - View all learned device configurations
-- `intuitherm.delete_learned_device` - Remove learned device by index
-- `intuitherm.export_learned_devices` - Export configurations as JSON
+2. **Solar Forecast** (`sensor.intuihems_solar_forecast`)
+   - Predicted solar production in kW
+   - Based on historical patterns
+   - Plan around solar availability
 
-### Configuration Storage
-- Persistent local storage via HA Store API
-- Device info extraction from entity registry
-- Pattern matching with substring support for model variants
+3. **Battery SoC Forecast** (`sensor.intuihems_battery_soc_forecast`)
+   - Predicted battery charge level (%)
+   - See when battery will charge/discharge
+   - Understand MPC optimization strategy
 
-## 📚 Documentation
+4. **Grid Import Forecast** (`sensor.intuihems_grid_import_forecast`)
+   - Predicted grid consumption in kW
+   - See when you'll pull from grid
+   - Correlate with price forecasts
 
-- [Device Learning System Guide](docs/DEVICE_LEARNING_SYSTEM.md)
-- [Device-Based Auto-Detection](docs/DEVICE_BASED_AUTODETECTION.md)
-- [Alpha Testing Guide](ALPHA_TESTING_GUIDE.md)
+5. **Grid Export Forecast** (`sensor.intuihems_grid_export_forecast`)
+   - Predicted solar export to grid in kW
+   - Understand surplus solar periods
+   - Optimize feed-in revenue
 
-## 🐛 Bug Fixes
+### Dashboard Integration
 
-- Fixed HACS repository URLs in manifest
-- Updated integration name to "intuiHEMS" consistently
-- Removed manual service URL/API key input for alpha phase
+Perfect for **ApexCharts card** - create stunning visualizations:
 
-## 📦 Installation
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: 24-Hour Energy Forecast
+graph_span: 24h
+now:
+  show: true
+  label: Now
+series:
+  - entity: sensor.intuihems_consumption_forecast
+    name: House Load
+    type: area
+    color: '#E74C3C'
+  - entity: sensor.intuihems_solar_forecast
+    name: Solar
+    type: area
+    color: '#F39C12'
+  - entity: sensor.intuihems_battery_soc_forecast
+    name: Battery SoC
+    type: line
+    color: '#3498DB'
+    yaxis_id: percentage
+yaxis:
+  - id: power
+    decimals: 1
+    apex_config:
+      title:
+        text: Power (kW)
+  - id: percentage
+    opposite: true
+    decimals: 0
+    apex_config:
+      title:
+        text: Battery (%)
+```
 
-### Via HACS (Custom Repository)
-1. HACS → Integrations → ⋮ → Custom repositories
-2. Add: `https://github.com/intui/intuitherm`
-3. Category: Integration
-4. Search "intuiHEMS" and install
-5. Restart Home Assistant
+See `docs/DASHBOARD_FORECAST_EXAMPLES.md` for more examples!
 
-### Manual
-Download and extract to `config/custom_components/intuitherm/`
+## 🔧 Setup Flow Improvements
 
-## ⚡ Quick Start
+### Battery Sensors Added
 
-1. Add Integration: Settings → Devices & Services → Add Integration → "intuiHEMS"
-2. Click through welcome screen (shows version)
-3. Auto-detection runs automatically
-4. Review and confirm sensors
-5. Battery controls auto-detected (if supported inverter)
-6. Done! ✨
+The sensor selection screen now includes:
+- ✅ **Battery Charge** (energy going INTO battery)
+- ✅ **Battery Discharge** (energy coming OUT of battery)
 
-## 🎯 What's Next
+**Why this matters**: These sensors are essential for calculating your actual house consumption using the power balance equation:
 
-### v2025.12.0 (Planned)
-- [ ] Merge to main branch
-- [ ] Official HACS default repository submission
-- [ ] Community API backend for device sharing
-- [ ] UI for opt-in/opt-out preferences
-- [ ] Additional inverter brand support
+```
+House Load = Solar + Battery Discharge + Grid Import - Battery Charge - Grid Export
+```
 
-## 🙏 Contributors
+### All Dropdowns
 
-- Core development: @intui
-- Alpha testers: (add your name!)
-- FoxESS pattern verified from production deployment
+All sensor selections now use consistent dropdown selectors for better UX.
 
-## 📞 Support
+## 🔐 HTTPS by Default
 
-- 🐛 [Report bugs](https://github.com/intui/intuitherm/issues)
-- 💡 [Feature requests](https://github.com/intui/intuitherm/issues)
-- 💬 [Discussions](https://github.com/intui/intuitherm/discussions)
+Service URL updated to `https://api.intuihems.de`:
+- ✅ SSL/TLS encryption
+- ✅ Professional domain
+- ✅ Auto-renewed Let's Encrypt certificates
+- ✅ Works even if server IP changes
+
+## 📚 New Documentation
+
+- **`HOUSE_LOAD_CALCULATION.md`**: Explains the power balance equation and why we need all 6 sensors
+- Dashboard YAML examples with ApexCharts
+
+## 🚀 Upgrade Instructions
+
+### For New Installations
+
+Just add the integration - it will use the new defaults automatically!
+
+### For Existing Installations
+
+1. **Re-configure to add battery sensors** (optional but recommended):
+   - Go to Settings → Devices & Services → intuiHEMS
+   - Click "Configure"
+   - On "Review & Select Sensors", add:
+     - Battery Charge sensor
+     - Battery Discharge sensor
+   - Complete the flow
+
+2. **New forecast sensors appear automatically** - no action needed!
+
+3. **Install ApexCharts card** (for dashboard visualizations):
+   - Go to HACS → Frontend
+   - Search for "ApexCharts Card"
+   - Install and restart Home Assistant
+
+4. **Add forecast dashboard**:
+   - Copy YAML from `docs/DASHBOARD_FORECAST_EXAMPLES.md`
+   - Create new dashboard view or add cards to existing
+
+## 🐛 Fixes
+
+- Production database migration chain repaired
+- Traefik reverse proxy configured with SSL
+- Service endpoints now use HTTPS domain
+
+## 📊 What's Next?
+
+The forecast sensors lay the groundwork for:
+- **Real-time optimization feedback**: See how MPC adapts to changing conditions
+- **Historical comparison**: Compare forecasts vs. actuals
+- **Advanced analytics**: Track forecast accuracy over time
+- **Smart notifications**: Alert when forecasts predict issues
 
 ---
 
-**Full Changelog**: https://github.com/intui/intuitherm/compare/v2025.11.4.2...v2025.11.9
+**Questions or Issues?**
+- Documentation: https://github.com/intui/intuiHEMS
+- Report bugs: https://github.com/intui/intuiHEMS/issues
+- Discussion: https://github.com/intui/intuiHEMS/discussions
