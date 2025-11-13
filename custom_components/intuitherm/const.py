@@ -44,7 +44,7 @@ CONF_GRID_EXPORT_PRICE: Final = "grid_export_price"  # Feed-in tariff (€/kWh)
 CONF_DRY_RUN_MODE: Final = "dry_run_mode"  # Test mode - MPC runs but doesn't send battery commands
 
 # Default values
-DEFAULT_SERVICE_URL: Final = "http://128.140.44.143:80"
+DEFAULT_SERVICE_URL: Final = "https://api.intuihems.de"
 DEFAULT_UPDATE_INTERVAL: Final = 60  # seconds
 DEFAULT_EPEX_MARKUP: Final = 0.10  # €0.10/kWh markup
 DEFAULT_GRID_EXPORT_PRICE: Final = 0.08  # €0.08/kWh feed-in tariff
