@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local compute mode (optional offline operation)
 - Email notifications for important events
 
+## [2025.11.13.4] - 2025-11-13
+
+### Added
+- **Battery SOC Forecast Sensor**: New sensor showing predicted battery state of charge over 24 hours
+  - 96 data points (15-minute intervals)
+  - Shows mean forecast as state
+  - Full forecast array in attributes
+  - Now have 3 forecast sensors total: Consumption, Solar, Battery SOC
+
 ## [2025.11.13.3] - 2025-11-13
 
 ### Changed

@@ -62,6 +62,7 @@ async def async_setup_entry(
         # Forecast sensors
         IntuiThermConsumptionForecastSensor(coordinator, entry),
         IntuiThermSolarForecastSensor(coordinator, entry),
+        IntuiThermBatterySOCForecastSensor(coordinator, entry),
         IntuiThermBatterySOCPlanSensor(coordinator, entry),
         IntuiThermNextControlSensor(coordinator, entry),
         IntuiThermPredictedCostSensor(coordinator, entry),
@@ -603,6 +604,51 @@ class IntuiThermSolarForecastSensor(IntuiThermSensorBase):
             "generated_at": forecast_data.get("generated_at"),
             "forecast_method": forecast_data.get("forecast_method"),
             "unit": "kW",
+        }
+
+
+class IntuiThermBatterySOCForecastSensor(IntuiThermSensorBase):
+    """Sensor showing battery SOC forecast."""
+
+    def __init__(self, coordinator: IntuiThermCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            "battery_soc_forecast",
+            "Battery SOC Forecast",
+            "mdi:battery-charging-80",
+        )
+        self._attr_device_class = SensorDeviceClass.BATTERY
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        """Return mean forecast value."""
+        if not self.coordinator.data:
+            return None
+
+        forecast_data = self.coordinator.data.get("battery_soc_forecast")
+        if not forecast_data or isinstance(forecast_data, Exception):
+            return None
+
+        return forecast_data.get("mean_forecast")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return forecast points as attributes."""
+        if not self.coordinator.data:
+            return {}
+
+        forecast_data = self.coordinator.data.get("battery_soc_forecast")
+        if not forecast_data or isinstance(forecast_data, Exception):
+            return {"error": str(forecast_data) if isinstance(forecast_data, Exception) else "No data"}
+
+        return {
+            "forecast": forecast_data.get("forecast", []),
+            "generated_at": forecast_data.get("generated_at"),
+            "unit": "%",
         }
 
 

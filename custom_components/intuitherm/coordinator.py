@@ -139,6 +139,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             data["consumption_forecast"] = consumption_forecast if not isinstance(consumption_forecast, Exception) else None
             data["solar_forecast"] = solar_forecast if not isinstance(solar_forecast, Exception) else None
             data["battery_soc_plan"] = battery_soc_plan if not isinstance(battery_soc_plan, Exception) else None
+            data["battery_soc_forecast"] = battery_soc_plan if not isinstance(battery_soc_plan, Exception) else None
             data["control_plan"] = control_plan if not isinstance(control_plan, Exception) else None
             data["price_forecast"] = price_forecast if not isinstance(price_forecast, Exception) else None
             
