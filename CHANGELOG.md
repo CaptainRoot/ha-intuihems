@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local compute mode (optional offline operation)
 - Email notifications for important events
 
+## [2025.11.13.3] - 2025-11-13
+
+### Changed
+- **Cleaner UI**: Removed "IntuiHEMS" prefix from all sensor and switch names
+  - Sensors now show as "Battery SOC Forecast", "Solar Forecast", etc.
+  - Already grouped under IntuiHEMS device, so prefix was redundant
+
+## [2025.11.13.2] - 2025-11-13
+
+### Changed
+- **Branding Update**: Renamed all user-facing names from "IntuiTherm" to "IntuiHEMS"
+  - Master Switch: "IntuiHEMS Master Switch"
+  - All sensors now show "IntuiHEMS" prefix
+  - Device name: "IntuiHEMS Battery Optimizer"
+
 ## [2025.11.13.1] - 2025-11-13
 
 ### Added

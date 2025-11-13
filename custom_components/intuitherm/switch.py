@@ -46,12 +46,12 @@ class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
     ) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
-        self._attr_name = "IntuiTherm Master Switch"
+        self._attr_name = "Master Switch"
         self._attr_icon = "mdi:power"
         self._attr_unique_id = f"{entry.entry_id}_{SWITCH_TYPE_AUTO_CONTROL}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "IntuiTherm Battery Optimizer",
+            "name": "Battery Optimizer",
             "manufacturer": "IntuiHEMS",
             "model": "Battery Optimization Service",
             "sw_version": "1.0",
@@ -106,7 +106,7 @@ class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the master switch (enable optimization system)."""
-        _LOGGER.info("Enabling IntuiTherm master switch - optimization system ON")
+        _LOGGER.info("Enabling IntuiHEMS master switch - optimization system ON")
 
         result = await self.coordinator.async_enable_auto_control()
 
@@ -123,7 +123,7 @@ class IntuiThermAutoControlSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the master switch (disable optimization system)."""
-        _LOGGER.info("Disabling IntuiTherm master switch - optimization system OFF")
+        _LOGGER.info("Disabling IntuiHEMS master switch - optimization system OFF")
 
         result = await self.coordinator.async_disable_auto_control()
 

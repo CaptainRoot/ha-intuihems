@@ -51,13 +51,13 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to IntuiTherm service. Please check the service URL and ensure the service is running.",
+      "cannot_connect": "Failed to connect to IntuiHEMS service. Please check the service URL and ensure the service is running.",
       "invalid_api_key": "Invalid API key. Please check your API key and try again.",
       "timeout_connect": "Connection timeout. The service took too long to respond. Please check if the service is reachable.",
       "unknown": "Unexpected error occurred. Please check the logs for more details."
     },
     "abort": {
-      "already_configured": "This IntuiTherm service is already configured."
+      "already_configured": "This IntuiHEMS service is already configured."
     }
   },
   "options": {
@@ -74,7 +74,7 @@
           "house_load_entity": "House Load (kW)"
         },
         "data_description": {
-          "service_url": "URL of your IntuiTherm service (e.g., http://128.140.44.143:80)",
+          "service_url": "URL of your IntuiHEMS service (e.g., http://128.140.44.143:80)",
           "api_key": "Bearer token for API authentication",
           "update_interval": "How often to poll the service for updates (30-300 seconds)",
           "battery_soc_entity": "Sensor showing battery charge percentage (0-100%)",

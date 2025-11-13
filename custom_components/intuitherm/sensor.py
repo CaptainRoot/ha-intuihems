@@ -68,7 +68,7 @@ async def async_setup_entry(
     ]
 
     async_add_entities(sensors)
-    _LOGGER.info("IntuiTherm sensors added")
+    _LOGGER.info("sensors added")
 
 
 class IntuiThermSensorBase(CoordinatorEntity, SensorEntity):
@@ -87,10 +87,11 @@ class IntuiThermSensorBase(CoordinatorEntity, SensorEntity):
         self._sensor_type = sensor_type
         self._attr_name = name
         self._attr_icon = icon
+        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{sensor_type}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "IntuiTherm Battery Optimizer",
+            "name": "Battery Optimizer",
             "manufacturer": "IntuiHEMS",
             "model": "Battery Optimization Service",
             "sw_version": "1.0",
@@ -106,7 +107,7 @@ class IntuiThermServiceHealthSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_SERVICE_HEALTH,
-            "IntuiTherm Service Health",
+            "Service Health",
             "mdi:heart-pulse",
         )
 
@@ -163,7 +164,7 @@ class IntuiThermOptimizationStatusSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_OPTIMIZATION_STATUS,
-            "IntuiTherm Optimization Status",
+            "Optimization Status",
             "mdi:robot",
         )
 
@@ -213,7 +214,7 @@ class IntuiThermControlModeSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_CONTROL_MODE,
-            "IntuiTherm Control Mode",
+            "Control Mode",
             "mdi:battery-charging",
         )
 
@@ -284,7 +285,7 @@ class IntuiThermMPCSuccessRateSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_MPC_SUCCESS_RATE,
-            "IntuiTherm MPC Success Rate",
+            "MPC Success Rate",
             "mdi:percent-circle",
         )
         self._attr_native_unit_of_measurement = PERCENTAGE
@@ -346,7 +347,7 @@ class IntuiThermMPCSolveTimeSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_MPC_SOLVE_TIME,
-            "IntuiTherm MPC Solve Time",
+            "MPC Solve Time",
             "mdi:timer-sand",
         )
         self._attr_native_unit_of_measurement = UnitOfTime.MILLISECONDS
@@ -405,7 +406,7 @@ class IntuiThermMPCRuns24hSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_MPC_RUNS_24H,
-            "IntuiTherm MPC Runs (24h)",
+            "MPC Runs (24h)",
             "mdi:counter",
         )
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -467,7 +468,7 @@ class IntuiThermDryRunModeSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             SENSOR_TYPE_DRY_RUN_MODE,
-            "IntuiTherm Test Mode",
+            "Test Mode",
             "mdi:test-tube",
         )
         self._entry = entry
@@ -520,7 +521,7 @@ class IntuiThermConsumptionForecastSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             "consumption_forecast",
-            "IntuiTherm Consumption Forecast",
+            "Consumption Forecast",
             "mdi:home-lightning-bolt",
         )
         self._attr_device_class = SensorDeviceClass.POWER
@@ -567,7 +568,7 @@ class IntuiThermSolarForecastSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             "solar_forecast",
-            "IntuiTherm Solar Forecast",
+            "Solar Forecast",
             "mdi:solar-power",
         )
         self._attr_device_class = SensorDeviceClass.POWER
@@ -614,7 +615,7 @@ class IntuiThermBatterySOCPlanSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             "battery_soc_plan",
-            "IntuiTherm Battery SOC Plan",
+            "Battery SOC Plan",
             "mdi:battery-charging",
         )
         self._attr_device_class = SensorDeviceClass.BATTERY
@@ -659,7 +660,7 @@ class IntuiThermNextControlSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             "next_control",
-            "IntuiTherm Next Control",
+            "Next Control",
             "mdi:chart-timeline-variant",
         )
 
@@ -759,7 +760,7 @@ class IntuiThermPredictedCostSensor(IntuiThermSensorBase):
             coordinator,
             entry,
             "predicted_cost",
-            "IntuiTherm Predicted Cost (24h)",
+            "Predicted Cost (24h)",
             "mdi:currency-eur",
         )
         self._attr_native_unit_of_measurement = "EUR"
