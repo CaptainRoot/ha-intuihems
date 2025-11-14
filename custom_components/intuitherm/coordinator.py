@@ -26,6 +26,7 @@ from .const import (
     CONF_GRID_IMPORT_SENSORS,
     CONF_GRID_EXPORT_SENSORS,
     CONF_BATTERY_SOC_ENTITY,
+    CONF_HOUSE_LOAD_ENTITY,
     CONF_SOLAR_POWER_ENTITY,
     CONF_DETECTED_ENTITIES,
 )
@@ -294,6 +295,10 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         # Add battery SOC if configured
         if battery_soc := config.get(CONF_BATTERY_SOC_ENTITY):
             sensor_mappings.append(([battery_soc], "soc"))
+        
+        # Add house load if configured (CRITICAL for MPC)
+        if house_load := config.get(CONF_HOUSE_LOAD_ENTITY):
+            sensor_mappings.append(([house_load], "load"))
 
         # Send data for each sensor type
         for entity_ids, sensor_type in sensor_mappings:
