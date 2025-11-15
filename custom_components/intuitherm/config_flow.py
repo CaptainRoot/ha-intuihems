@@ -129,14 +129,21 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ha_instance_id = await instance_id.async_get(self.hass)
                 latitude = self.hass.config.latitude
                 longitude = self.hass.config.longitude
+                elevation = self.hass.config.elevation
                 timezone = str(self.hass.config.time_zone)
-                ha_version = self.hass.config.config_dir  # Use a safer attribute
                 location_name = self.hass.config.location_name
                 
+                # Get HA version safely
+                try:
+                    from homeassistant.const import __version__ as ha_version
+                except ImportError:
+                    ha_version = None
+                
                 _LOGGER.info("HA Instance ID: %s", ha_instance_id)
-                _LOGGER.info("Location: (%s, %s)", latitude, longitude)
+                _LOGGER.info("Location: (%s, %s, %sm)", latitude, longitude, elevation)
                 _LOGGER.info("Timezone: %s", timezone)
                 _LOGGER.info("Location Name: %s", location_name)
+                _LOGGER.info("HA Version: %s", ha_version)
                 
                 # Check service status first (alpha limit)
                 _LOGGER.info("Checking service availability...")
@@ -172,11 +179,21 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.info("Registering with backend...")
                 registration_data = {
                     "installation_id": ha_instance_id,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "timezone": timezone,
-                    "installation_name": location_name,
+                    "latitude": float(latitude),
+                    "longitude": float(longitude),
                 }
+                
+                # Add optional fields only if they have valid values
+                if elevation is not None and elevation > 0:
+                    registration_data["elevation"] = float(elevation)
+                if timezone:
+                    registration_data["timezone"] = timezone
+                if location_name:
+                    registration_data["installation_name"] = location_name
+                if ha_version:
+                    registration_data["ha_version"] = ha_version
+                
+                _LOGGER.debug("Registration payload: %s", {k: v for k, v in registration_data.items() if k != "installation_id"})
                 
                 async with asyncio.timeout(15):
                     async with session.post(
@@ -221,8 +238,13 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             errors["base"] = "alpha_limit_reached"
                             
                         else:
-                            # Other error
+                            # Other error - log full details
                             _LOGGER.error("Registration failed with status %d: %s", resp.status, response_text)
+                            try:
+                                error_json = await resp.json()
+                                _LOGGER.error("Error details: %s", error_json)
+                            except:
+                                pass
                             errors["base"] = "registration_failed"
                 
             except asyncio.TimeoutError:
