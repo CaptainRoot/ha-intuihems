@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import aiohttp
@@ -35,10 +36,15 @@ from .const import (
     CONF_EPEX_MARKUP,
     CONF_GRID_EXPORT_PRICE,
     CONF_DRY_RUN_MODE,
+    CONF_INSTANCE_ID,
+    CONF_USER_ID,
+    CONF_REGISTERED_AT,
     DEFAULT_SERVICE_URL,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_EPEX_MARKUP,
     DEFAULT_GRID_EXPORT_PRICE,
+    ENDPOINT_AUTH_STATUS,
+    ENDPOINT_AUTH_REGISTER,
     ENDPOINT_HEALTH,
     DEVICE_CONTROL_MAPPINGS,
 )
@@ -83,9 +89,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         from .const import VERSION
         
         if user_input is not None:
-            # Use hard-coded development values (TODO: Add credential step)
+            # Set service URL (production only, no user config)
             self._service_url = DEFAULT_SERVICE_URL
-            self._api_key = "A6SJ7InZ0cjMMNEP7FS2YOqfr6JMvxZVwbKfPC-dYsk"  # Development API key
             self._update_interval = DEFAULT_UPDATE_INTERVAL
             
             _LOGGER.info("=" * 60)
@@ -95,14 +100,143 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.info("Update Interval: %d seconds", self._update_interval)
             _LOGGER.info("=" * 60)
             
-            # Move directly to auto-detection
-            return await self.async_step_auto_detect()
+            # Auto-register with backend to get API key
+            return await self.async_step_register()
 
         # Show welcome screen with version
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({}),
             description_placeholders={"version": VERSION},
+        )
+
+    async def async_step_register(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Auto-register with backend to get API key."""
+        from homeassistant.helpers import instance_id
+        
+        errors: dict[str, str] = {}
+        
+        # This step is automatic - no user input
+        if user_input is None:
+            _LOGGER.info("")
+            _LOGGER.info("STEP: Auto-Registration with Backend")
+            _LOGGER.info("-" * 60)
+            
+            try:
+                # Get HA instance details
+                ha_instance_id = await instance_id.async_get(self.hass)
+                latitude = self.hass.config.latitude
+                longitude = self.hass.config.longitude
+                timezone = str(self.hass.config.time_zone)
+                ha_version = self.hass.config.config_dir  # Use a safer attribute
+                location_name = self.hass.config.location_name
+                
+                _LOGGER.info("HA Instance ID: %s", ha_instance_id)
+                _LOGGER.info("Location: (%s, %s)", latitude, longitude)
+                _LOGGER.info("Timezone: %s", timezone)
+                _LOGGER.info("Location Name: %s", location_name)
+                
+                # Check service status first (alpha limit)
+                _LOGGER.info("Checking service availability...")
+                session = async_get_clientsession(self.hass)
+                
+                async with asyncio.timeout(10):
+                    async with session.get(
+                        f"{self._service_url}{ENDPOINT_AUTH_STATUS}"
+                    ) as resp:
+                        if resp.status == 200:
+                            status_data = await resp.json()
+                            _LOGGER.info(
+                                "Service status: %s (users: %d/%s)",
+                                status_data.get("phase"),
+                                status_data.get("registered_users", 0),
+                                status_data.get("max_users", "unlimited")
+                            )
+                            
+                            if not status_data.get("accepting_registrations", True):
+                                waitlist_url = status_data.get("waitlist_url", "https://intuihems.io/waitlist")
+                                _LOGGER.warning("Service not accepting registrations - alpha limit reached")
+                                errors["base"] = "alpha_limit_reached"
+                                return self.async_show_form(
+                                    step_id="register",
+                                    data_schema=vol.Schema({}),
+                                    errors=errors,
+                                    description_placeholders={"waitlist_url": waitlist_url},
+                                )
+                        else:
+                            _LOGGER.warning("Could not check service status (status=%d), proceeding anyway", resp.status)
+                
+                # Register with backend
+                _LOGGER.info("Registering with backend...")
+                registration_data = {
+                    "installation_id": ha_instance_id,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "timezone": timezone,
+                    "installation_name": location_name,
+                }
+                
+                async with asyncio.timeout(15):
+                    async with session.post(
+                        f"{self._service_url}{ENDPOINT_AUTH_REGISTER}",
+                        json=registration_data,
+                    ) as resp:
+                        response_text = await resp.text()
+                        
+                        if resp.status == 201:
+                            # Success - new registration
+                            response_data = await resp.json()
+                            self._api_key = response_data["api_key"]
+                            user_id = response_data["user_id"]
+                            
+                            _LOGGER.info("✅ Registration successful!")
+                            _LOGGER.info("User ID: %s", user_id)
+                            _LOGGER.info("API key received (length: %d chars)", len(self._api_key))
+                            _LOGGER.info("Setup required: %s", response_data.get("setup_required", True))
+                            
+                            # Store for later
+                            self._detected_entities[CONF_INSTANCE_ID] = ha_instance_id
+                            self._detected_entities[CONF_USER_ID] = user_id
+                            self._detected_entities[CONF_REGISTERED_AT] = datetime.now(timezone.utc).isoformat()
+                            
+                            # Move to auto-detection
+                            return await self.async_step_auto_detect()
+                            
+                        elif resp.status == 409:
+                            # Already registered
+                            _LOGGER.warning("Installation already registered")
+                            try:
+                                error_data = await resp.json()
+                                registered_at = error_data.get("detail", {}).get("registered_at", "unknown")
+                                _LOGGER.info("Previously registered at: %s", registered_at)
+                            except:
+                                pass
+                            errors["base"] = "already_registered"
+                            
+                        elif resp.status == 503:
+                            # Service unavailable (alpha limit)
+                            _LOGGER.warning("Service unavailable - alpha limit reached")
+                            errors["base"] = "alpha_limit_reached"
+                            
+                        else:
+                            # Other error
+                            _LOGGER.error("Registration failed with status %d: %s", resp.status, response_text)
+                            errors["base"] = "registration_failed"
+                
+            except asyncio.TimeoutError:
+                _LOGGER.error("Registration timeout")
+                errors["base"] = "timeout_connect"
+            except Exception as err:
+                _LOGGER.exception("Registration error: %s", err)
+                errors["base"] = "registration_failed"
+        
+        # Show error form if registration failed
+        return self.async_show_form(
+            step_id="register",
+            data_schema=vol.Schema({}),
+            errors=errors,
         )
 
     async def async_step_auto_detect(

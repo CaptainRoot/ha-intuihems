@@ -5,6 +5,10 @@
         "title": "intuiHEMS Energy Optimization v{version}",
         "description": "This setup wizard will:\n\n🔍 Auto-detect your energy devices\n   • Battery systems\n   • Solar inverters\n   • Grid meters\n\n📊 Find the best sensors to monitor\n   • Cumulative energy meters (kWh) - most reliable\n   • Battery state of charge (%)\n   • Power sensors (kW) - fallback\n\n⚡ Enable battery optimization\n   • Smart charging during cheap hours\n   • Maximize solar self-consumption\n   • Minimize grid costs\n\nPrerequisites:\n• Home Assistant Energy Dashboard configured\n• Battery/Solar/Grid devices integrated\n\nSetup takes ~2 minutes."
       },
+      "register": {
+        "title": "Connecting to intuiHEMS",
+        "description": "Registering your Home Assistant installation with the cloud service...\n\n✨ Creating your account automatically\n🔐 Generating secure API key\n📍 Using your location for weather data\n\nThis takes just a few seconds."
+      },
       "auto_detect": {
         "title": "Auto-Detecting Energy Sensors",
         "description": "Scanning your Home Assistant Energy Dashboard and devices...\n\nWe prefer cumulative energy sensors (kWh) because they provide the most reliable data for optimization. The backend will automatically compute power values from these.\n\nThis may take 10-15 seconds."
@@ -54,6 +58,9 @@
       "cannot_connect": "Failed to connect to IntuiTherm service. Please check the service URL and ensure the service is running.",
       "invalid_api_key": "Invalid API key. Please check your API key and try again.",
       "timeout_connect": "Connection timeout. The service took too long to respond. Please check if the service is reachable.",
+      "registration_failed": "Failed to register with intuiHEMS service. Please try again or contact support if the problem persists.",
+      "already_registered": "This Home Assistant installation is already registered. If you need to recover your API key, please contact support at support@intuihems.io.",
+      "alpha_limit_reached": "The service has reached its alpha testing capacity. Please join the waitlist at {waitlist_url}",
       "unknown": "Unexpected error occurred. Please check the logs for more details."
     },
     "abort": {

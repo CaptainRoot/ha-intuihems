@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "intuitherm"
 
 # Version
-VERSION: Final = "2025.11.10.6"
+VERSION: Final = "2025.11.15.1"
 
 # Platforms
 PLATFORMS: Final = ["sensor", "switch"]
@@ -14,6 +14,9 @@ PLATFORMS: Final = ["sensor", "switch"]
 CONF_SERVICE_URL: Final = "service_url"
 CONF_API_KEY: Final = "api_key"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
+CONF_INSTANCE_ID: Final = "instance_id"
+CONF_USER_ID: Final = "user_id"
+CONF_REGISTERED_AT: Final = "registered_at"
 
 # Auto-detected entity configuration keys
 CONF_DETECTED_ENTITIES: Final = "detected_entities"
@@ -50,6 +53,8 @@ DEFAULT_EPEX_MARKUP: Final = 0.10  # €0.10/kWh markup
 DEFAULT_GRID_EXPORT_PRICE: Final = 0.08  # €0.08/kWh feed-in tariff
 
 # Service endpoints
+ENDPOINT_AUTH_STATUS: Final = "/api/v1/auth/status"
+ENDPOINT_AUTH_REGISTER: Final = "/api/v1/auth/register"
 ENDPOINT_HEALTH: Final = "/api/v1/health"
 ENDPOINT_INFO: Final = "/api/v1/info"
 ENDPOINT_CONTROL_STATUS: Final = "/api/v1/control/status"
