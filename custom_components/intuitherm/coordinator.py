@@ -93,33 +93,40 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                 await self._send_sensor_readings()
                 _LOGGER.info("✅ Sensor readings sent")
 
-            async with asyncio.timeout(15):
-                _LOGGER.info("🌐 Fetching backend data...")
-                # Fetch all endpoints in parallel for efficiency
-                health_task = self._fetch_json(ENDPOINT_HEALTH)
-                status_task = self._fetch_json(ENDPOINT_CONTROL_STATUS)
-                metrics_task = self._fetch_json(ENDPOINT_METRICS, params={"period_hours": 1})
-                
-                # Fetch forecast data
-                consumption_forecast_task = self._fetch_json("/api/v1/forecasts/consumption")
-                solar_forecast_task = self._fetch_json("/api/v1/forecasts/solar")
-                battery_soc_plan_task = self._fetch_json("/api/v1/forecasts/battery_soc")
-                control_plan_task = self._fetch_json("/api/v1/control/plan")  # Pull-based control plan
-                price_forecast_task = self._fetch_json("/api/v1/forecasts/prices")
+            try:
+                async with asyncio.timeout(15):
+                    _LOGGER.info("🌐 Fetching backend data...")
+                    # Fetch all endpoints in parallel for efficiency
+                    health_task = self._fetch_json(ENDPOINT_HEALTH)
+                    status_task = self._fetch_json(ENDPOINT_CONTROL_STATUS)
+                    metrics_task = self._fetch_json(ENDPOINT_METRICS, params={"period_hours": 1})
+                    
+                    # Fetch forecast data
+                    consumption_forecast_task = self._fetch_json("/api/v1/forecasts/consumption")
+                    solar_forecast_task = self._fetch_json("/api/v1/forecasts/solar")
+                    battery_soc_plan_task = self._fetch_json("/api/v1/forecasts/battery_soc")
+                    control_plan_task = self._fetch_json("/api/v1/control/plan")  # Pull-based control plan
+                    price_forecast_task = self._fetch_json("/api/v1/forecasts/prices")
 
-                health, status, metrics, consumption_forecast, solar_forecast, \
-                battery_soc_plan, control_plan, price_forecast = await asyncio.gather(
-                    health_task,
-                    status_task,
-                    metrics_task,
-                    consumption_forecast_task,
-                    solar_forecast_task,
-                    battery_soc_plan_task,
-                    control_plan_task,
-                    price_forecast_task,
-                    return_exceptions=True,
-                )
-                _LOGGER.info("✅ Backend data fetched successfully")
+                    health, status, metrics, consumption_forecast, solar_forecast, \
+                    battery_soc_plan, control_plan, price_forecast = await asyncio.gather(
+                        health_task,
+                        status_task,
+                        metrics_task,
+                        consumption_forecast_task,
+                        solar_forecast_task,
+                        battery_soc_plan_task,
+                        control_plan_task,
+                        price_forecast_task,
+                        return_exceptions=True,
+                    )
+                    _LOGGER.info("✅ Backend data fetched successfully")
+            except (asyncio.TimeoutError, asyncio.CancelledError) as err:
+                _LOGGER.warning("⏱️ Backend data fetch timed out or was cancelled: %s", err)
+                # Return partial data with None values for missing data
+                health = status = metrics = None
+                consumption_forecast = solar_forecast = battery_soc_plan = None
+                control_plan = price_forecast = None
 
             # Build response, handling individual failures gracefully
             data = {

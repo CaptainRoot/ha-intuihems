@@ -118,7 +118,7 @@ class IntuiThermServiceHealthSensor(IntuiThermSensorBase):
         if not self.coordinator.data:
             return None
 
-        health_data = self.coordinator.data.get("health", {})
+        health_data = self.coordinator.data.get("health") or {}
 
         if isinstance(health_data, Exception):
             return "unhealthy"
@@ -139,7 +139,7 @@ class IntuiThermServiceHealthSensor(IntuiThermSensorBase):
         if not self.coordinator.data:
             return {}
 
-        health_data = self.coordinator.data.get("health", {})
+        health_data = self.coordinator.data.get("health") or {}
 
         if isinstance(health_data, Exception):
             return {"error": str(health_data)}
