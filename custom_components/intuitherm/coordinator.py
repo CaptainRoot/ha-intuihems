@@ -80,13 +80,11 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                 self._sensors_registered = True
                 _LOGGER.info("✅ Sensors registered")
             
-            # Backfill historic data on first run
+            # Skip automatic backfill - it can timeout on large datasets
+            # Users can manually trigger backfill via service call if needed
             if not self._historic_data_sent and self.entry:
-                _LOGGER.info("⏳ Starting historic backfill...")
-                success = await self._backfill_historic_data()
-                if success:
-                    self._historic_data_sent = True
-                    _LOGGER.info("✅ Historic backfill complete")
+                _LOGGER.info("⏭️ Skipping automatic backfill (use 'intuitherm.backfill_data' service if needed)")
+                self._historic_data_sent = True  # Mark as done to skip in future
 
             # Send sensor readings
             if self.entry:
@@ -205,13 +203,14 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         self,
         endpoint: str,
         data: dict[str, Any] | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
         """Post JSON data to an endpoint."""
         url = f"{self.service_url}{endpoint}"
 
         try:
             async with self.session.post(
-                url, headers=self.headers, json=data
+                url, headers=self.headers, json=data, timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 response.raise_for_status()
                 return await response.json()
@@ -380,7 +379,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         
         _LOGGER.info("📤 Sent %d sensor readings (skipped %d unchanged)", sensors_sent, sensors_skipped)
     async def _backfill_historic_data(self) -> bool:
-        """Backfill up to 7 days of historic sensor data on first run.
+        """Backfill up to 3 days of historic sensor data on first run.
         
         Returns:
             True if backfill succeeded, False otherwise
@@ -388,7 +387,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder.history import state_changes_during_period
         
-        _LOGGER.info("Starting historic data backfill (up to 7 days)")
+        _LOGGER.info("Starting historic data backfill (up to 3 days)")
         
         try:
             # Get recorder instance
@@ -402,9 +401,9 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             # Get detected entities (sensors are stored under this key)
             detected = config.get(CONF_DETECTED_ENTITIES, {})
             
-            # Calculate time range (7 days back)
+            # Calculate time range (3 days back)
             end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(days=7)
+            start_time = end_time - timedelta(days=3)
             
             # Collect all entity IDs to backfill (using the same logic as _send_sensor_readings)
             entities_to_backfill = []
@@ -507,8 +506,8 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                 if not readings:
                     continue
                 
-                # Send in batches of 100 (API max_items limit)
-                batch_size = 100
+                # Send in smaller batches to avoid timeout (50 instead of 100)
+                batch_size = 50
                 for i in range(0, len(readings), batch_size):
                     batch = readings[i:i + batch_size]
                     try:
@@ -518,7 +517,8 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                                 "sensor_type": sensor_type,
                                 "entity_id": entity_id,
                                 "readings": batch,
-                            }
+                            },
+                            timeout=60,  # 60 second timeout for backfill
                         )
                         total_readings += len(batch)
                         _LOGGER.debug(
@@ -527,6 +527,8 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                             entity_id,
                             sensor_type
                         )
+                        # Small delay between batches to avoid overwhelming backend
+                        await asyncio.sleep(0.5)
                     except Exception as err:
                         _LOGGER.warning(
                             "Failed to send historic batch for %s: %s",
