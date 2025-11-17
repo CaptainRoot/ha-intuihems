@@ -60,6 +60,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         self.entry = entry
         self._sensors_registered = False
         self._historic_data_sent = False  # Track if historic backfill completed
+        self._last_sent_values = {}  # Track last sent value per sensor to avoid sending unchanged values
 
         _LOGGER.info(
             "IntuiTherm coordinator initialized (service: %s, interval: %s)",
@@ -331,12 +332,21 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
 
         # Send data for each sensor type
         sensors_sent = 0
+        sensors_skipped = 0
         for entity_ids, sensor_type in sensor_mappings:
             for entity_id in entity_ids:
                 state = self.hass.states.get(entity_id)
                 if state and state.state not in ("unknown", "unavailable"):
                     try:
                         value = float(state.state)
+                        
+                        # Only send if value has changed since last update
+                        last_value = self._last_sent_values.get(entity_id)
+                        if last_value is not None and abs(value - last_value) < 0.001:
+                            sensors_skipped += 1
+                            _LOGGER.debug("⏭️ Skipping %s: value unchanged (%.3f)", entity_id, value)
+                            continue
+                        
                         timestamp = datetime.now(timezone.utc)
                         
                         # Send to backend using /sensors/data endpoint
@@ -353,6 +363,9 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                                 ],
                             }
                         )
+                        
+                        # Update last sent value
+                        self._last_sent_values[entity_id] = value
                         sensors_sent += 1
                         _LOGGER.debug("✓ Sent %s reading for %s: %s", sensor_type, entity_id, value)
                     except (ValueError, TypeError) as err:
@@ -365,7 +378,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                     else:
                         _LOGGER.warning("❌ Sensor not found: %s", entity_id)
         
-        _LOGGER.info("📤 Sent %d sensor readings", sensors_sent)
+        _LOGGER.info("📤 Sent %d sensor readings (skipped %d unchanged)", sensors_sent, sensors_skipped)
     async def _backfill_historic_data(self) -> bool:
         """Backfill up to 7 days of historic sensor data on first run.
         
