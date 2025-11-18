@@ -301,82 +301,86 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
 
         config = {**self.entry.data, **self.entry.options}
         
-        # Get detected entities (sensors are stored under this key)
+        # Get SELECTED entities from config (not all detected)
+        # These are the user's final selections from the setup flow
         detected = config.get(CONF_DETECTED_ENTITIES, {})
         
-        # Debug: Log what sensors are configured
-        _LOGGER.info("📋 Configured sensors:")
-        _LOGGER.info("  Solar: %s", detected.get(CONF_SOLAR_SENSORS, []))
-        _LOGGER.info("  Battery Charge: %s", detected.get(CONF_BATTERY_CHARGE_SENSORS, []))
-        _LOGGER.info("  Battery Discharge: %s", detected.get(CONF_BATTERY_DISCHARGE_SENSORS, []))
-        _LOGGER.info("  Grid Import: %s", detected.get(CONF_GRID_IMPORT_SENSORS, []))
-        _LOGGER.info("  Grid Export: %s", detected.get(CONF_GRID_EXPORT_SENSORS, []))
-        _LOGGER.info("  Battery SOC: %s", detected.get(CONF_BATTERY_SOC_ENTITY))
+        # Build list of selected sensors only
+        selected_sensors = []
         
-        # Map our sensor categories to backend sensor types
-        sensor_mappings = [
-            (detected.get(CONF_SOLAR_SENSORS, []), "solar"),
-            (detected.get(CONF_BATTERY_DISCHARGE_SENSORS, []), "soc"),  # Battery discharge correlates with SOC
-            (detected.get(CONF_BATTERY_CHARGE_SENSORS, []), "soc"),
-            (detected.get(CONF_GRID_IMPORT_SENSORS, []), "load"),  # Grid import indicates load
-            (detected.get(CONF_GRID_EXPORT_SENSORS, []), "load"),
-        ]
+        # Solar power (single selected entity)
+        if solar_power := detected.get(CONF_SOLAR_POWER_ENTITY):
+            selected_sensors.append((solar_power, "solar"))
         
-        # Add battery SOC if configured
+        # Battery SOC (single selected entity)
         if battery_soc := detected.get(CONF_BATTERY_SOC_ENTITY):
-            sensor_mappings.append(([battery_soc], "soc"))
+            selected_sensors.append((battery_soc, "soc"))
         
-        # Add house load if configured (CRITICAL for MPC)
+        # House load (single selected entity)
         if house_load := detected.get(CONF_HOUSE_LOAD_ENTITY):
-            sensor_mappings.append(([house_load], "load"))
+            selected_sensors.append((house_load, "load"))
+        
+        # Battery charge/discharge (arrays of selected entities)
+        for entity_id in detected.get(CONF_BATTERY_CHARGE_SENSORS, []):
+            selected_sensors.append((entity_id, "battery_charge"))
+        
+        for entity_id in detected.get(CONF_BATTERY_DISCHARGE_SENSORS, []):
+            selected_sensors.append((entity_id, "battery_discharge"))
+        
+        for entity_id in detected.get(CONF_GRID_IMPORT_SENSORS, []):
+            selected_sensors.append((entity_id, "grid_import"))
+        
+        for entity_id in detected.get(CONF_GRID_EXPORT_SENSORS, []):
+            selected_sensors.append((entity_id, "grid_export"))
+        
+        _LOGGER.debug("📋 Sending data for %d selected sensors", len(selected_sensors))
 
-        # Send data for each sensor type
+        # Send data for each selected sensor
         sensors_sent = 0
         sensors_skipped = 0
-        for entity_ids, sensor_type in sensor_mappings:
-            for entity_id in entity_ids:
-                state = self.hass.states.get(entity_id)
-                if state and state.state not in ("unknown", "unavailable"):
-                    try:
-                        value = float(state.state)
-                        
-                        # Only send if value has changed since last update
-                        last_value = self._last_sent_values.get(entity_id)
-                        if last_value is not None and abs(value - last_value) < 0.001:
-                            sensors_skipped += 1
-                            _LOGGER.debug("⏭️ Skipping %s: value unchanged (%.3f)", entity_id, value)
-                            continue
-                        
-                        timestamp = datetime.now(timezone.utc)
-                        
-                        # Send to backend using /sensors/data endpoint
-                        await self._post_json(
-                            "/api/v1/sensors/data",
-                            data={
-                                "sensor_type": sensor_type,
-                                "entity_id": entity_id,
-                                "readings": [
-                                    {
-                                        "timestamp": timestamp.isoformat(),
-                                        "value": value,
-                                    }
-                                ],
-                            }
-                        )
-                        
-                        # Update last sent value
-                        self._last_sent_values[entity_id] = value
-                        sensors_sent += 1
-                        _LOGGER.debug("✓ Sent %s reading for %s: %s", sensor_type, entity_id, value)
-                    except (ValueError, TypeError) as err:
-                        _LOGGER.warning("⚠️ Could not parse value for %s: %s (state=%s)", entity_id, err, state.state)
-                    except Exception as err:
-                        _LOGGER.warning("⚠️ Failed to send reading for %s: %s", entity_id, err)
+        for entity_id, sensor_type in selected_sensors:
+            state = self.hass.states.get(entity_id)
+            if state and state.state not in ("unknown", "unavailable"):
+                try:
+                    value = float(state.state)
+                    
+                    # Only send if value has changed since last update
+                    last_value = self._last_sent_values.get(entity_id)
+                    if last_value is not None and abs(value - last_value) < 0.001:
+                        sensors_skipped += 1
+                        _LOGGER.debug("⏭️ Skipping %s: value unchanged (%.3f)", entity_id, value)
+                        continue
+                    
+                    timestamp = datetime.now(timezone.utc)
+                    
+                    # Send to backend using /sensors/data endpoint
+                    await self._post_json(
+                        "/api/v1/sensors/data",
+                        data={
+                            "sensor_type": sensor_type,
+                            "entity_id": entity_id,
+                            "readings": [
+                                {
+                                    "timestamp": timestamp.isoformat(),
+                                    "value": value,
+                                }
+                            ],
+                        }
+                    )
+                    
+                    # Update last sent value
+                    self._last_sent_values[entity_id] = value
+                    sensors_sent += 1
+                    _LOGGER.debug("✓ Sent %s reading for %s: %s", sensor_type, entity_id, value)
+                except (ValueError, TypeError) as err:
+                    _LOGGER.warning("⚠️ Could not parse value for %s: %s (state=%s)", entity_id, err, state.state)
+                except Exception as err:
+                    _LOGGER.warning("⚠️ Failed to send reading for %s: %s", entity_id, err)
+            else:
+                if state:
+                    _LOGGER.debug("⏭️ Skipping %s: state=%s", entity_id, state.state)
                 else:
-                    if state:
-                        _LOGGER.debug("⏭️ Skipping %s: state=%s", entity_id, state.state)
-                    else:
-                        _LOGGER.warning("❌ Sensor not found: %s", entity_id)
+                    _LOGGER.warning("❌ Sensor not found: %s", entity_id)
         
         _LOGGER.info("📤 Sent %d sensor readings (skipped %d unchanged)", sensors_sent, sensors_skipped)
 
