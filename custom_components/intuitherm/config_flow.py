@@ -759,7 +759,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_pricing(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure dynamic pricing and control mode."""
+        """Configure dynamic pricing, battery specs, and control mode."""
         errors: dict[str, str] = {}
         
         if user_input is not None:
@@ -767,6 +767,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             epex_markup = user_input.get(CONF_EPEX_MARKUP, DEFAULT_EPEX_MARKUP)
             grid_export_price = user_input.get(CONF_GRID_EXPORT_PRICE, DEFAULT_GRID_EXPORT_PRICE)
             dry_run_mode = user_input.get(CONF_DRY_RUN_MODE, False)
+            battery_capacity = user_input.get(CONF_BATTERY_CAPACITY, DEFAULT_BATTERY_CAPACITY)
+            battery_max_power = user_input.get(CONF_BATTERY_MAX_POWER, DEFAULT_BATTERY_MAX_POWER)
             
             try:
                 epex_markup = float(epex_markup)
@@ -782,15 +784,35 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (ValueError, TypeError):
                 errors[CONF_GRID_EXPORT_PRICE] = "Invalid number format"
             
+            try:
+                battery_capacity = float(battery_capacity)
+                if battery_capacity < 1 or battery_capacity > 100:
+                    errors[CONF_BATTERY_CAPACITY] = "Battery capacity must be between 1 and 100 kWh"
+            except (ValueError, TypeError):
+                errors[CONF_BATTERY_CAPACITY] = "Invalid number format"
+            
+            try:
+                battery_max_power = float(battery_max_power)
+                if battery_max_power < 0.5 or battery_max_power > 20:
+                    errors[CONF_BATTERY_MAX_POWER] = "Battery max power must be between 0.5 and 20 kW"
+            except (ValueError, TypeError):
+                errors[CONF_BATTERY_MAX_POWER] = "Invalid number format"
+            
             if not errors:
-                # Store pricing and control mode configuration
+                # Store pricing, battery specs, and control mode configuration
                 self._detected_entities[CONF_EPEX_MARKUP] = epex_markup
                 self._detected_entities[CONF_GRID_EXPORT_PRICE] = grid_export_price
                 self._detected_entities[CONF_DRY_RUN_MODE] = dry_run_mode
+                self._detected_entities[CONF_BATTERY_CAPACITY] = battery_capacity
+                self._detected_entities[CONF_BATTERY_MAX_POWER] = battery_max_power
                 
                 _LOGGER.info(
                     "Pricing configured: markup=%.3f€/kWh, export=%.3f€/kWh, dry_run=%s",
                     epex_markup, grid_export_price, dry_run_mode
+                )
+                _LOGGER.info(
+                    "Battery configured: capacity=%.1fkWh, max_power=%.2fkW",
+                    battery_capacity, battery_max_power
                 )
                 
                 # Create config entry (historic data backfill will happen on first run)
@@ -807,6 +829,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="pricing",
             data_schema=vol.Schema({
+                vol.Required(CONF_BATTERY_CAPACITY, default=DEFAULT_BATTERY_CAPACITY, description="Battery capacity (kWh)"): vol.All(vol.Coerce(float), vol.Range(min=1.0, max=100.0)),
+                vol.Required(CONF_BATTERY_MAX_POWER, default=DEFAULT_BATTERY_MAX_POWER, description="Battery max power (kW)"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=20.0)),
                 vol.Required(CONF_EPEX_MARKUP, default=DEFAULT_EPEX_MARKUP): vol.Coerce(float),
                 vol.Required(CONF_GRID_EXPORT_PRICE, default=DEFAULT_GRID_EXPORT_PRICE): vol.Coerce(float),
                 vol.Optional(CONF_DRY_RUN_MODE, default=False): bool,

@@ -40,15 +40,21 @@
         }
       },
       "pricing": {
-        "title": "Configure Dynamic Pricing",
-        "description": "intuiHEMS uses EPEX Day-Ahead spot prices for optimization.\n\n💶 Enter your additional costs on top of the spot price\n📊 These values help calculate the most cost-effective battery strategy\n\n✨ Historic data will be collected automatically on first run",
+        "title": "Configure Battery & Pricing",
+        "description": "Configure your battery specifications and electricity pricing.\n\n🔋 Battery Configuration\n   • Enter your actual battery capacity and max power\n   • Used for optimization calculations\n\n💶 Dynamic Pricing\n   • EPEX markup: Additional costs on top of spot price\n   • Export price: Feed-in tariff for sold energy\n\n✨ Historic data will be collected automatically on first run",
         "data": {
+          "battery_capacity": "Battery Capacity (kWh)",
+          "battery_max_power": "Battery Max Power (kW)",
           "epex_markup": "Grid Import Markup (€/kWh)",
-          "grid_export_price": "Grid Export Price (€/kWh)"
+          "grid_export_price": "Grid Export Price (€/kWh)",
+          "dry_run_mode": "Dry Run Mode (test without controlling battery)"
         },
         "data_description": {
+          "battery_capacity": "Total usable battery capacity in kWh (e.g., 11.0 for an 11 kWh battery)",
+          "battery_max_power": "Maximum charge/discharge power in kW (e.g., 2.99 for ~3 kW max)",
           "epex_markup": "Additional cost you pay on top of EPEX spot price (taxes, fees, supplier margin)",
-          "grid_export_price": "Feed-in tariff you receive for exported energy"
+          "grid_export_price": "Feed-in tariff you receive for exported energy",
+          "dry_run_mode": "Enable to test MPC without sending battery commands"
         }
       }
     },
