@@ -398,7 +398,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             _LOGGER.error("⚠️ Historic backfill error: %s", err, exc_info=True)
 
     async def _backfill_historic_data(self) -> bool:
-        """Backfill up to 3 days of historic sensor data on first run.
+        """Backfill up to 7 days of historic sensor data on first run.
         
         Returns:
             True if backfill succeeded, False otherwise
@@ -406,7 +406,7 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder.history import state_changes_during_period
         
-        _LOGGER.info("Starting historic data backfill (up to 3 days)")
+        _LOGGER.info("Starting historic data backfill (up to 7 days)")
         
         try:
             # Get recorder instance
@@ -420,9 +420,9 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             # Get detected entities (sensors are stored under this key)
             detected = config.get(CONF_DETECTED_ENTITIES, {})
             
-            # Calculate time range (3 days back)
+            # Calculate time range (7 days back)
             end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(days=3)
+            start_time = end_time - timedelta(days=7)
             
             # Collect all entity IDs to backfill (using the same logic as _send_sensor_readings)
             entities_to_backfill = []
