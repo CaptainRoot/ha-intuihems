@@ -23,11 +23,11 @@
         "data": {
           "solar_production": "Solar Production Sensor",
           "battery_soc": "Battery State of Charge",
-          "battery_charge": "Battery Charge Sensor",
-          "battery_discharge": "Battery Discharge Sensor",
-          "grid_import": "Grid Import Sensor",
-          "grid_export": "Grid Export Sensor",
-          "house_load": "House Load Sensor (OPTIONAL)"
+          "battery_charge": "Battery Charge Sensor (Optional)",
+          "battery_discharge": "Battery Discharge Sensor (Optional)",
+          "grid_import": "Grid Import Sensor (Optional)",
+          "grid_export": "Grid Export Sensor (Optional)",
+          "house_load": "House Load Sensor (Optional)"
         },
         "data_description": {
           "solar_production": "Select or enter cumulative solar energy production sensor (kWh preferred)",

@@ -708,14 +708,8 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["solar_production"] = "Solar production sensor is required"
             if not battery_soc:
                 errors["battery_soc"] = "Battery SoC sensor is required"
-            if not battery_charge:
-                errors["battery_charge"] = "Battery charge sensor is required"
-            if not battery_discharge:
-                errors["battery_discharge"] = "Battery discharge sensor is required"
-            if not grid_import:
-                errors["grid_import"] = "Grid import sensor is required"
-            if not grid_export:
-                errors["grid_export"] = "Grid export sensor is required"
+            
+            # Optional sensors - no validation needed
             
             # Get house load (optional)
             house_load = user_input.get("house_load", "").strip() or None
@@ -899,6 +893,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         battery_soc = self._detected_entities.get(CONF_BATTERY_SOC_ENTITY)
         
         # Pick recommended sensors (first cumulative one of each type)
+        # We calculate them but don't use them for defaults anymore (per user request)
         recommended_solar = None
         if solar_sensors:
             # Prefer solar_energy_total, then other _total sensors
@@ -915,27 +910,6 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not recommended_solar:
                 recommended_solar = solar_sensors[0]
         
-        recommended_grid_import = None
-        if grid_import:
-            for sensor in grid_import:
-                if "total" in sensor.lower() and "today" not in sensor.lower():
-                    recommended_grid_import = sensor
-                    break
-            if not recommended_grid_import:
-                recommended_grid_import = grid_import[0]
-        
-        recommended_grid_export = None
-        if grid_export:
-            for sensor in grid_export:
-                if "total" in sensor.lower() and "today" not in sensor.lower():
-                    recommended_grid_export = sensor
-                    break
-            if not recommended_grid_export:
-                recommended_grid_export = grid_export[0]
-        
-        recommended_battery_charge = battery_charge[0] if battery_charge else None
-        recommended_battery_discharge = battery_discharge[0] if battery_discharge else None
-        
         # Build list of options for selector (just entity IDs)
         def build_selector_options(sensor_list):
             """Build options list for selector."""
@@ -949,7 +923,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         # Solar production (required)
         if solar_sensors:
-            schema[vol.Required("solar_production", default=recommended_solar)] = selector.SelectSelector(
+            schema[vol.Required("solar_production")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=build_selector_options(solar_sensors),
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -968,7 +942,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     and self.hass.states.get(entry.entity_id)):
                     soc_options.append(entry.entity_id)
             
-            schema[vol.Required("battery_soc", default=battery_soc)] = selector.SelectSelector(
+            schema[vol.Required("battery_soc")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=soc_options,
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -976,9 +950,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
         
-        # Battery charge (required)
+        # Battery charge (optional)
         if battery_charge:
-            schema[vol.Required("battery_charge", default=recommended_battery_charge)] = selector.SelectSelector(
+            schema[vol.Optional("battery_charge")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=build_selector_options(battery_charge),
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -986,9 +960,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
         
-        # Battery discharge (required)
+        # Battery discharge (optional)
         if battery_discharge:
-            schema[vol.Required("battery_discharge", default=recommended_battery_discharge)] = selector.SelectSelector(
+            schema[vol.Optional("battery_discharge")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=build_selector_options(battery_discharge),
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -996,9 +970,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
         
-        # Grid import (required)
+        # Grid import (optional)
         if grid_import:
-            schema[vol.Required("grid_import", default=recommended_grid_import)] = selector.SelectSelector(
+            schema[vol.Optional("grid_import")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=build_selector_options(grid_import),
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -1006,9 +980,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
         
-        # Grid export (required)
+        # Grid export (optional)
         if grid_export:
-            schema[vol.Required("grid_export", default=recommended_grid_export)] = selector.SelectSelector(
+            schema[vol.Optional("grid_export")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=build_selector_options(grid_export),
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -1030,7 +1004,7 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         if house_load_options:
             current_house_load = self._detected_entities.get(CONF_HOUSE_LOAD_ENTITY)
-            schema[vol.Optional("house_load", default=current_house_load, description="OPTIONAL - Auto-calculated if not provided")] = selector.SelectSelector(
+            schema[vol.Optional("house_load", description="OPTIONAL - Auto-calculated if not provided")] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=house_load_options,
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -1846,14 +1820,11 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
                     detected_entities[CONF_HOUSE_LOAD_ENTITY] = user_input[CONF_HOUSE_LOAD_ENTITY]
                 
                 # Update battery charge/discharge sensors (stored as lists)
-                if user_input.get("battery_charge"):
-                    detected_entities[CONF_BATTERY_CHARGE_SENSORS] = [user_input["battery_charge"]]
-                if user_input.get("battery_discharge"):
-                    detected_entities[CONF_BATTERY_DISCHARGE_SENSORS] = [user_input["battery_discharge"]]
-                if user_input.get("grid_import"):
-                    detected_entities[CONF_GRID_IMPORT_SENSORS] = [user_input["grid_import"]]
-                if user_input.get("grid_export"):
-                    detected_entities[CONF_GRID_EXPORT_SENSORS] = [user_input["grid_export"]]
+                # Handle clearing of optional sensors
+                detected_entities[CONF_BATTERY_CHARGE_SENSORS] = [user_input["battery_charge"]] if user_input.get("battery_charge") else []
+                detected_entities[CONF_BATTERY_DISCHARGE_SENSORS] = [user_input["battery_discharge"]] if user_input.get("battery_discharge") else []
+                detected_entities[CONF_GRID_IMPORT_SENSORS] = [user_input["grid_import"]] if user_input.get("grid_import") else []
+                detected_entities[CONF_GRID_EXPORT_SENSORS] = [user_input["grid_export"]] if user_input.get("grid_export") else []
                 
                 # Build options dict with updated sensors and battery specs
                 # Note: Service URL and API key are preserved from original config (not user-editable)

@@ -22,23 +22,21 @@
         "description": "We recommend using the following cumulative energy sensors (kWh). Select from the dropdown or enter a custom entity ID below each sensor.\n\n✅ Cumulative sensors provide the most reliable data\n📝 Custom fields override dropdown selections",
         "data": {
           "solar_production": "Solar Production Sensor",
-          "solar_production_custom": "  ↳ Or enter custom entity ID",
           "battery_soc": "Battery State of Charge",
-          "battery_soc_custom": "  ↳ Or enter custom entity ID",
-          "grid_import": "Grid Import Sensor",
-          "grid_import_custom": "  ↳ Or enter custom entity ID",
-          "grid_export": "Grid Export Sensor",
-          "grid_export_custom": "  ↳ Or enter custom entity ID"
+          "battery_charge": "Battery Charge Sensor (Optional)",
+          "battery_discharge": "Battery Discharge Sensor (Optional)",
+          "grid_import": "Grid Import Sensor (Optional)",
+          "grid_export": "Grid Export Sensor (Optional)",
+          "house_load": "House Load Sensor (Optional)"
         },
         "data_description": {
           "solar_production": "Select cumulative solar energy production sensor (kWh preferred)",
-          "solar_production_custom": "Leave blank to use dropdown selection above",
           "battery_soc": "Select battery charge percentage sensor (0-100%)",
-          "battery_soc_custom": "Leave blank to use dropdown selection above",
+          "battery_charge": "Select cumulative battery charge energy sensor (kWh preferred)",
+          "battery_discharge": "Select cumulative battery discharge energy sensor (kWh preferred)",
           "grid_import": "Select cumulative energy imported from grid (kWh preferred)",
-          "grid_import_custom": "Leave blank to use dropdown selection above",
           "grid_export": "Select cumulative energy exported to grid (kWh preferred)",
-          "grid_export_custom": "Leave blank to use dropdown selection above"
+          "house_load": "Select house load sensor (optional, auto-calculated if omitted)"
         }
       },
       "pricing": {
