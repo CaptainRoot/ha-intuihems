@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "intuitherm"
 
 # Version
-VERSION = "2025.11.21.1"
+VERSION = "2025.11.25.1"
 
 # Platforms
 PLATFORMS: Final = ["sensor", "switch"]

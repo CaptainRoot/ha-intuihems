@@ -1,0 +1,115 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "intuiHEMS Energieoptimierung v{version}",
+        "description": "Dieser Einrichtungsassistent wird:\n\n🔍 Ihre Energiegeräte automatisch erkennen\n   • Batteriesysteme\n   • Solarwechselrichter\n   • Netzzähler\n\n📊 Die besten Sensoren zur Überwachung finden\n   • Kumulative Energiezähler (kWh) - am zuverlässigsten\n   • Batterieladezustand (%)\n   • Leistungssensoren (kW) - Fallback\n\n⚡ Batterieoptimierung aktivieren\n   • Intelligentes Laden in günstigen Stunden\n   • Maximierung des Solar-Eigenverbrauchs\n   • Minimierung der Netzkosten\n\nVoraussetzungen:\n• Home Assistant Energie-Dashboard konfiguriert\n• Batterie/Solar/Netz-Geräte integriert\n\nDie Einrichtung dauert ca. 2 Minuten."
+      },
+      "show_user_id": {
+        "title": "✅ Registrierung erfolgreich!",
+        "description": "Ihre Benutzer-ID lautet:\n\n**{user_id}**\n\nℹ️ Speichern Sie diese ID für Fehlerbehebung und Support.\n\nKlicken Sie auf Absenden, um mit der Geräteerkennung fortzufahren."
+      },
+      "auto_detect": {
+        "title": "Energiesensoren werden automatisch erkannt",
+        "description": "Scanne Ihr Home Assistant Energie-Dashboard und Ihre Geräte...\n\nWir bevorzugen kumulative Energiesensoren (kWh), da diese die zuverlässigsten Daten für die Optimierung liefern. Das Backend berechnet daraus automatisch die Leistungswerte.\n\nDies kann 10-15 Sekunden dauern."
+      },
+      "device_discovery": {
+        "title": "Gefundene Energiegeräte",
+        "description": "{device_details}\n\nKlicken Sie auf Weiter, um zur Sensorüberprüfung zu gelangen."
+      },
+      "review": {
+        "title": "Sensoren überprüfen & auswählen",
+        "description": "Wählen Sie Sensoren aus der Liste oder geben Sie eine benutzerdefinierte Entitäts-ID ein.\n\n✅ Kumulative Energiesensoren (kWh) liefern die zuverlässigsten Daten\n💡 Sie können jede Entitäts-ID direkt in die Dropdown-Felder eingeben",
+        "data": {
+          "solar_production": "Solarproduktions-Sensor",
+          "battery_soc": "Batterieladezustand",
+          "battery_charge": "Batterieladesensor (Optional)",
+          "battery_discharge": "Batterieentladesensor (Optional)",
+          "grid_import": "Netzbezugssensor (Optional)",
+          "grid_export": "Netzeinspeisesensor (Optional)",
+          "house_load": "Hausverbrauchssensor (Optional)"
+        },
+        "data_description": {
+          "solar_production": "Wählen oder geben Sie den kumulativen Solarenergie-Produktionssensor ein (kWh bevorzugt)",
+          "battery_soc": "Wählen oder geben Sie den Batterieladezustandssensor ein (0-100%)",
+          "battery_charge": "Wählen oder geben Sie den Sensor für Energie IN die Batterie ein (kWh bevorzugt)",
+          "battery_discharge": "Wählen oder geben Sie den Sensor für Energie AUS der Batterie ein (kWh bevorzugt)",
+          "grid_import": "Wählen oder geben Sie den kumulativen Netzbezugssensor ein (kWh bevorzugt)",
+          "grid_export": "Wählen oder geben Sie den kumulativen Netzeinspeisesensor ein (kWh bevorzugt)",
+          "house_load": "OPTIONAL - Wählen oder geben Sie den Hausverbrauchssensor ein. Falls nicht angegeben, wird er automatisch berechnet aus: Solar + Batterieentladung + Netzbezug - Batterieladung - Netzeinspeisung"
+        }
+      },
+      "pricing": {
+        "title": "Batterie & Preise konfigurieren",
+        "description": "Konfigurieren Sie Ihre Batteriespezifikationen und Strompreise.\n\n🔋 Batteriekonfiguration\n   • Geben Sie Ihre tatsächliche Batteriekapazität und maximale Leistung ein\n   • Wird für Optimierungsberechnungen verwendet\n\n💶 Dynamische Preise\n   • EPEX-Aufschlag: Zusätzliche Kosten zum Spotpreis\n   • Einspeisevergütung: Vergütung für verkaufte Energie\n\n✨ Historische Daten werden beim ersten Lauf automatisch gesammelt",
+        "data": {
+          "battery_capacity": "Batteriekapazität (kWh)",
+          "battery_max_power": "Maximale Batterieleistung (kW)",
+          "epex_markup": "Netzbezugsaufschlag (€/kWh)",
+          "grid_export_price": "Einspeisevergütung (€/kWh)",
+          "dry_run_mode": "Testmodus (ohne Batteriesteuerung)"
+        },
+        "data_description": {
+          "battery_capacity": "Gesamte nutzbare Batteriekapazität in kWh (z.B. 11.0 für eine 11 kWh Batterie)",
+          "battery_max_power": "Maximale Lade-/Entladeleistung in kW (z.B. 2.99 für ~3 kW max)",
+          "epex_markup": "Zusätzliche Kosten, die Sie zusätzlich zum EPEX-Spotpreis zahlen (Steuern, Gebühren, Lieferantenmarge)",
+          "grid_export_price": "Einspeisevergütung, die Sie für exportierte Energie erhalten",
+          "dry_run_mode": "Aktivieren, um MPC zu testen, ohne Batteriebefehle zu senden"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum IntuiHEMS-Dienst fehlgeschlagen. Bitte überprüfen Sie die Dienst-URL und stellen Sie sicher, dass der Dienst läuft.",
+      "invalid_api_key": "Ungültiger API-Schlüssel. Bitte überprüfen Sie Ihren API-Schlüssel und versuchen Sie es erneut.",
+      "timeout_connect": "Zeitüberschreitung der Verbindung. Der Dienst hat zu lange nicht geantwortet. Bitte prüfen Sie, ob der Dienst erreichbar ist.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte überprüfen Sie die Protokolle für weitere Details."
+    },
+    "abort": {
+      "already_configured": "Dieser IntuiHEMS-Dienst ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "IntuiTherm Optionen konfigurieren",
+        "description": "Aktualisieren Sie Ihre IntuiTherm-Integrationseinstellungen.",
+        "data": {
+          "service_url": "Dienst-URL",
+          "api_key": "API-Schlüssel",
+          "update_interval": "Aktualisierungsintervall (Sekunden)",
+          "battery_soc_entity": "Batterieladezustand (%)",
+          "solar_power_entity": "Solarleistung (kW)",
+          "house_load_entity": "Hausverbrauch (kW)"
+        },
+        "data_description": {
+          "service_url": "URL Ihres IntuiHEMS-Dienstes (z.B. http://128.140.44.143:80)",
+          "api_key": "Bearer-Token für API-Authentifizierung",
+          "update_interval": "Wie oft der Dienst auf Updates abgefragt werden soll (30-300 Sekunden)",
+          "battery_soc_entity": "Sensor, der den Batterieladezustand in Prozent anzeigt (0-100%)",
+          "solar_power_entity": "Sensor, der die aktuelle Solarproduktion in kW anzeigt",
+          "house_load_entity": "Sensor, der den aktuellen Hausverbrauch in kW anzeigt"
+        }
+      }
+    }
+  },
+  "services": {
+    "manual_override": {
+      "name": "Manuelle Übersteuerung",
+      "description": "Manuelle Übersteuerung des Batteriesteuerungsmodus für eine bestimmte Dauer.",
+      "fields": {
+        "action": {
+          "name": "Aktion",
+          "description": "Die auszuführende Steuerungsaktion (z.B. 'force_charge', 'self_use', 'backup')"
+        },
+        "power_kw": {
+          "name": "Leistung (kW)",
+          "description": "Zielleistungssollwert in kW (0-3.0 kW)"
+        },
+        "duration_minutes": {
+          "name": "Dauer (Minuten)",
+          "description": "Wie lange die Übersteuerung angewendet werden soll (1-1440 Minuten)"
+        }
+      }
+    }
+  }
+}
