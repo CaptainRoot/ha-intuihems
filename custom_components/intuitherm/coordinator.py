@@ -442,6 +442,9 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             # Collect all entity IDs to backfill (using the same logic as _send_sensor_readings)
             entities_to_backfill = []
             
+            # Debug: log what's in detected_entities
+            _LOGGER.debug("Detected entities for backfill: %s", detected)
+            
             # Solar - use the main solar_power_entity if configured, otherwise first from list
             solar_power_entity = detected.get(CONF_SOLAR_POWER_ENTITY)
             if solar_power_entity:
