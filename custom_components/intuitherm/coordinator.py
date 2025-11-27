@@ -476,6 +476,12 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                 entities_to_backfill.append((grid_export_sensors[0], "load"))
                 _LOGGER.debug("Backfill: Grid export sensor: %s", grid_export_sensors[0])
             
+            # House load (cumulative consumption sensor)
+            house_load_entity = detected.get(CONF_HOUSE_LOAD_ENTITY)
+            if house_load_entity:
+                entities_to_backfill.append((house_load_entity, "load"))
+                _LOGGER.debug("Backfill: House load sensor: %s", house_load_entity)
+            
             # Battery SoC
             battery_soc = detected.get(CONF_BATTERY_SOC_ENTITY)
             if battery_soc:

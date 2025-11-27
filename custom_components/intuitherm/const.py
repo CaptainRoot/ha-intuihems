@@ -1,11 +1,23 @@
 """Constants for the IntuiTherm integration."""
 from typing import Final
+import json
+from pathlib import Path
 
 # Integration domain
 DOMAIN: Final = "intuitherm"
 
-# Version
-VERSION = "2025.11.25.2"
+# Version - read from manifest.json
+def _get_version() -> str:
+    """Read version from manifest.json."""
+    try:
+        manifest_path = Path(__file__).parent / "manifest.json"
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+            return manifest.get("version", "unknown")
+    except Exception:
+        return "unknown"
+
+VERSION = _get_version()
 
 # Platforms
 PLATFORMS: Final = ["sensor", "switch"]
