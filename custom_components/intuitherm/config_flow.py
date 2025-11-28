@@ -1838,6 +1838,12 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
                 except Exception as err:
                     _LOGGER.warning("Failed to update battery config on backend: %s", err)
                 
+                # Trigger forecast and MPC regeneration after sensor reconfiguration
+                try:
+                    await self._trigger_forecast_and_mpc(current_config)
+                except Exception as err:
+                    _LOGGER.warning("Failed to trigger forecast/MPC regeneration: %s", err)
+                
                 # Save updated options
                 return self.async_create_entry(title="", data=options_data)
 
@@ -2025,3 +2031,36 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
                 raise Exception(f"Backend returned {response.status}: {error_text}")
             
         _LOGGER.info("Updated battery config on backend: %.1f kWh @ %.2f kW", capacity_kwh, max_power_kw)
+    
+    async def _trigger_forecast_and_mpc(self, config: dict) -> None:
+        """Trigger forecast regeneration and MPC optimization after sensor reconfiguration."""
+        service_url = config.get(CONF_SERVICE_URL, DEFAULT_SERVICE_URL)
+        api_key = config.get(CONF_API_KEY)
+        
+        if not api_key:
+            raise ValueError("No API key available")
+        
+        session = async_get_clientsession(self.hass)
+        headers = {"Authorization": f"Bearer {api_key}"}
+        
+        # Trigger forecast regeneration
+        forecast_url = f"{service_url}/api/v1/forecasts/trigger"
+        async with session.post(forecast_url, headers=headers) as response:
+            if response.status == 200:
+                result = await response.json()
+                _LOGGER.info("Triggered forecast regeneration: %s forecasts generated", 
+                           result.get("forecasts_generated", 0))
+            else:
+                error_text = await response.text()
+                _LOGGER.warning("Failed to trigger forecast: %s - %s", response.status, error_text)
+        
+        # Trigger MPC optimization
+        mpc_url = f"{service_url}/api/v1/mpc/trigger"
+        async with session.post(mpc_url, headers=headers) as response:
+            if response.status == 200:
+                result = await response.json()
+                _LOGGER.info("Triggered MPC optimization: %s", 
+                           "successful" if result.get("mpc_run_successful") else "failed")
+            else:
+                error_text = await response.text()
+                _LOGGER.warning("Failed to trigger MPC: %s - %s", response.status, error_text)
