@@ -1472,8 +1472,15 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_detected_sensors(self) -> None:
         """Validate all detected sensors and log results."""
+        # Non-entity configuration keys to skip
+        non_entity_keys = {CONF_INSTANCE_ID, CONF_USER_ID, CONF_REGISTERED_AT}
+        
         for key, value in self._detected_entities.items():
             if not value:
+                continue
+            
+            # Skip non-entity configuration keys (instance_id, user_id, etc.)
+            if key in non_entity_keys:
                 continue
             
             # Skip list values (multi-sensor lists)
