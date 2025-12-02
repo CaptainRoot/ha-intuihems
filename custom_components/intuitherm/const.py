@@ -29,6 +29,9 @@ CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_INSTANCE_ID: Final = "instance_id"
 CONF_USER_ID: Final = "user_id"
 CONF_REGISTERED_AT: Final = "registered_at"
+CONF_USER_EMAIL: Final = "user_email"  # Optional user email for communications
+CONF_MARKETING_CONSENT: Final = "marketing_consent"  # User consent for product updates
+CONF_SAVINGS_REPORT_CONSENT: Final = "savings_report_consent"  # User consent for monthly savings reports
 
 # Auto-detected entity configuration keys
 CONF_DETECTED_ENTITIES: Final = "detected_entities"

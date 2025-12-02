@@ -2,8 +2,18 @@
   "config": {
     "step": {
       "user": {
-        "title": "intuiHEMS Energy Optimization v{version}",
-        "description": "This setup wizard will:\n\n🔍 Auto-detect your energy devices\n   • Battery systems\n   • Solar inverters\n   • Grid meters\n\n📊 Find the best sensors to monitor\n   • Cumulative energy meters (kWh) - most reliable\n   • Battery state of charge (%)\n   • Power sensors (kW) - fallback\n\n⚡ Enable battery optimization\n   • Smart charging during cheap hours\n   • Maximize solar self-consumption\n   • Minimize grid costs\n\nPrerequisites:\n• Home Assistant Energy Dashboard configured\n• Battery/Solar/Grid devices integrated\n\nSetup takes ~2 minutes."
+        "title": "Hi {user_name}! 👋 Welcome to intuiHEMS v{version}",
+        "description": "This setup wizard will:\n\n🔍 Auto-detect your energy devices\n   • Battery systems\n   • Solar inverters\n   • Grid meters\n\n📊 Find the best sensors to monitor\n   • Cumulative energy meters (kWh) - most reliable\n   • Battery state of charge (%)\n   • Power sensors (kW) - fallback\n\n⚡ Enable battery optimization\n   • Smart charging during cheap hours\n   • Maximize solar self-consumption\n   • Minimize grid costs\n\nPrerequisites:\n• Home Assistant Energy Dashboard configured\n• Battery/Solar/Grid devices integrated\n\nSetup takes ~2 minutes.",
+        "data": {
+          "user_email": "Email Address (optional)",
+          "marketing_consent": "Send me product updates and tips",
+          "savings_report_consent": "Send me monthly energy savings reports"
+        },
+        "data_description": {
+          "user_email": "Optional: Receive setup confirmation and important updates",
+          "marketing_consent": "Get occasional emails about new features and energy optimization tips (you can unsubscribe anytime)",
+          "savings_report_consent": "Receive monthly reports showing your energy cost savings and battery performance (requires email)"
+        }
       },
       "show_user_id": {
         "title": "✅ Registration Successful!",

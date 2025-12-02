@@ -46,6 +46,9 @@ from .const import (
     CONF_DRY_RUN_MODE,
     CONF_INSTANCE_ID,
     CONF_USER_ID,
+    CONF_USER_EMAIL,
+    CONF_MARKETING_CONSENT,
+    CONF_SAVINGS_REPORT_CONSENT,
     CONF_REGISTERED_AT,
     DEFAULT_SERVICE_URL,
     DEFAULT_UPDATE_INTERVAL,
@@ -86,6 +89,10 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._detected_entities: dict[str, Any] = {}
         self._device_info: dict[str, Any] | None = None  # Track device for learning
         self._device_learning_store = None  # Will be initialized when needed
+        self._user_name: str | None = None  # HA user's display name for personalization
+        self._user_email: str | None = None  # Optional user email
+        self._marketing_consent: bool = False  # Consent for product updates
+        self._savings_report_consent: bool = False  # Consent for savings reports
         
         # Multi-device and multi-sensor support
         self._discovered_devices: list[dict[str, Any]] = []  # All found devices
@@ -97,10 +104,15 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Handle the initial step - welcome screen."""
+        """Handle the initial step - welcome screen with email opt-in."""
         from .const import VERSION
         
         if user_input is not None:
+            # Store user inputs
+            self._user_email = user_input.get("user_email", "").strip() or None
+            self._marketing_consent = user_input.get("marketing_consent", False)
+            self._savings_report_consent = user_input.get("savings_report_consent", False)
+            
             # Set service URL (production only, no user config)
             self._service_url = DEFAULT_SERVICE_URL
             self._update_interval = DEFAULT_UPDATE_INTERVAL
@@ -110,16 +122,37 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.info("Version: %s", VERSION)
             _LOGGER.info("Service URL: %s", self._service_url)
             _LOGGER.info("Update Interval: %d seconds", self._update_interval)
+            if self._user_email:
+                _LOGGER.info("User Email: %s (marketing: %s, savings: %s)", self._user_email, self._marketing_consent, self._savings_report_consent)
             _LOGGER.info("=" * 60)
             
             # Auto-register with backend to get API key
             return await self.async_step_register()
 
-        # Show welcome screen with version
+        # Get current HA user's display name for personalization
+        user_name = "there"  # Fallback
+        try:
+            if self.context.get("user_id"):
+                user = await self.hass.auth.async_get_user(self.context["user_id"])
+                if user and user.name:
+                    user_name = user.name
+                    self._user_name = user_name
+                    _LOGGER.info("Detected HA user: %s", user_name)
+        except Exception as e:
+            _LOGGER.debug("Could not get HA user name: %s", e)
+        
+        # Show welcome screen with version and personalized greeting
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({}),
-            description_placeholders={"version": VERSION},
+            data_schema=vol.Schema({
+                vol.Optional("user_email", default=""): str,
+                vol.Optional("marketing_consent", default=False): bool,
+                vol.Optional("savings_report_consent", default=False): bool,
+            }),
+            description_placeholders={
+                "version": VERSION,
+                "user_name": user_name,
+            },
         )
 
     async def async_step_register(
@@ -204,11 +237,22 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     registration_data["installation_name"] = location_name
                 if ha_version:
                     registration_data["ha_version"] = ha_version
+                if self._user_email:
+                    registration_data["user_email"] = self._user_email
+                if self._marketing_consent:
+                    registration_data["marketing_consent"] = self._marketing_consent
+                if self._savings_report_consent:
+                    registration_data["savings_report_consent"] = self._savings_report_consent
                 
                 _LOGGER.info("Registration payload:")
                 for key, value in registration_data.items():
                     if key == "installation_id":
                         _LOGGER.info("  %s: %s", key, value[:8] + "..." if len(value) > 8 else value)
+                    elif key == "user_email":
+                        # Mask email for privacy in logs
+                        email_parts = value.split("@") if "@" in value else [value]
+                        masked = f"{email_parts[0][:2]}...@{email_parts[1]}" if len(email_parts) == 2 else "***"
+                        _LOGGER.info("  %s: %s", key, masked)
                     else:
                         _LOGGER.info("  %s: %s", key, value)
                 
@@ -628,8 +672,28 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # User clicked Next, proceed to review
             return await self.async_step_review()
         
+        # Build personalized greeting
+        greeting = f"Hi {self._user_name or 'there'}, "
+        
+        # Check if we have known devices
+        known_device_msg = ""
+        if self._discovered_devices:
+            first_device = self._discovered_devices[0]
+            manufacturer = first_device.get("manufacturer", "")
+            model = first_device.get("model", "Unknown Model")
+            
+            if manufacturer and model:
+                known_device_msg = f"we discovered your **{manufacturer} {model}**. Good news: we know this device and can prefill most of your configuration!"
+            elif manufacturer:
+                known_device_msg = f"we discovered your **{manufacturer}** device. Good news: we can auto-detect most settings!"
+            else:
+                known_device_msg = f"we discovered your energy system!"
+        
         # Build description with discovered devices
         description_parts = []
+        if known_device_msg:
+            description_parts.append(greeting + known_device_msg + "\n")
+        
         description_parts.append(f"Discovered {len(self._discovered_devices)} device(s):\n")
         
         for device in self._discovered_devices:
@@ -962,6 +1026,9 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_API_KEY: self._api_key,
                         CONF_UPDATE_INTERVAL: self._update_interval,
                         CONF_DETECTED_ENTITIES: self._detected_entities,
+                        CONF_USER_EMAIL: self._user_email,
+                        CONF_MARKETING_CONSENT: self._marketing_consent,
+                        CONF_SAVINGS_REPORT_CONSENT: self._savings_report_consent,
                     },
                 )
         
