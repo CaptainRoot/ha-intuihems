@@ -64,8 +64,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Fetch initial data
     _LOGGER.info("🚀 Starting first coordinator refresh (will trigger sensor registration and backfill)...")
-    await coordinator.async_config_entry_first_refresh()
-    _LOGGER.info("✅ First coordinator refresh complete")
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        _LOGGER.info("✅ First coordinator refresh complete")
+    except Exception as err:
+        _LOGGER.error("❌ First coordinator refresh failed: %s", err, exc_info=True)
+        # Don't fail setup - coordinator will retry
+        _LOGGER.warning("Continuing setup despite coordinator error (will retry automatically)")
 
     # Store coordinator
     hass.data.setdefault(DOMAIN, {})
