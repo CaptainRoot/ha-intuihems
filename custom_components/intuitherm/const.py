@@ -61,6 +61,11 @@ BATTERY_MODE_NAMES: Final = {
     BATTERY_MODE_FORCE_CHARGE: "Force Charge",
 }
 
+# Battery mode mapping configuration keys (map our standard modes to device-specific values)
+CONF_MODE_SELF_USE: Final = "mode_self_use"  # Device's "self use" mode value
+CONF_MODE_BACKUP: Final = "mode_backup"  # Device's "backup" mode value
+CONF_MODE_FORCE_CHARGE: Final = "mode_force_charge"  # Device's "force charge" mode value
+
 # Battery specifications
 CONF_BATTERY_CAPACITY: Final = "battery_capacity_kwh"  # Battery capacity in kWh
 CONF_BATTERY_MAX_POWER: Final = "battery_max_power_kw"  # Battery max charge/discharge power in kW

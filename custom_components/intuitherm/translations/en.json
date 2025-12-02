@@ -39,6 +39,34 @@
           "house_load": "OPTIONAL - Select or enter house consumption sensor. If not provided, auto-calculated from: Solar + Battery Discharge + Grid Import - Battery Charge - Grid Export"
         }
       },
+      "battery_control": {
+        "title": "Battery Control Configuration",
+        "description": "Configure battery control entities for MPC optimization.\n\n⚠️  Only configure these if:\n   • You want actual battery control (not demo mode)\n   • Your battery/inverter supports remote control\n   • You understand MPC will send commands to these entities\n\n💡 Leave all fields empty to skip battery control (monitoring only)",
+        "data": {
+          "battery_mode_select": "Battery Mode Select Entity",
+          "battery_charge_power": "Charge Power Control Entity",
+          "battery_discharge_power": "Discharge Power Control Entity"
+        },
+        "data_description": {
+          "battery_mode_select": "Select entity to control battery operating mode (e.g., select.work_mode)",
+          "battery_charge_power": "Number entity to set charge power limit (e.g., number.force_charge_power)",
+          "battery_discharge_power": "Number entity to set discharge power limit (e.g., number.force_discharge_power)"
+        }
+      },
+      "mode_mapping": {
+        "title": "Map Battery Operating Modes",
+        "description": "Map your device's mode options to standard IntuiTherm modes.\n\nYour device: **{entity}**\nAvailable options: {options}\n\n💡 Select the exact option name from your device for each standard mode:",
+        "data": {
+          "mode_self_use": "Self Use Mode",
+          "mode_backup": "Backup Mode",
+          "mode_force_charge": "Force Charge Mode"
+        },
+        "data_description": {
+          "mode_self_use": "Normal operation: use solar, discharge battery when needed",
+          "mode_backup": "Preserve battery: minimize discharge, keep for backup",
+          "mode_force_charge": "Charge from grid: force battery charging (e.g., during cheap hours)"
+        }
+      },
       "pricing": {
         "title": "Configure Battery & Pricing",
         "description": "Configure your battery specifications and electricity pricing.\n\n🔋 Battery Configuration\n   • Enter your actual battery capacity and max power\n   • Used for optimization calculations\n\n💶 Dynamic Pricing\n   • EPEX markup: Additional costs on top of spot price\n   • Export price: Feed-in tariff for sold energy\n\n✨ Historic data will be collected automatically on first run",

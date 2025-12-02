@@ -33,6 +33,10 @@ from .const import (
     CONF_BATTERY_MODE_SELECT,
     CONF_BATTERY_CHARGE_POWER,
     CONF_BATTERY_DISCHARGE_POWER,
+    CONF_MODE_SELF_USE,
+    CONF_MODE_BACKUP,
+    CONF_MODE_FORCE_CHARGE,
+    BATTERY_MODE_NAMES,
     CONF_BATTERY_CAPACITY,
     CONF_BATTERY_MAX_POWER,
     CONF_BATTERY_CHARGE_MAX_POWER,
@@ -735,11 +739,161 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.info("Sensors configured: solar=%s, battery_soc=%s, house_load=%s",
                              solar_production, battery_soc, house_load)
                 
-                # Proceed to pricing configuration
-                return await self.async_step_pricing()
+                # Proceed to battery control configuration
+                return await self.async_step_battery_control()
         
         # If no user input yet, show the review form with available sensors
         return await self._show_review_form()
+    
+    async def async_step_battery_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure battery control entities (optional, skip if no battery or demo mode)."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            # Extract control entities
+            battery_mode_select = user_input.get(CONF_BATTERY_MODE_SELECT)
+            battery_charge_power = user_input.get(CONF_BATTERY_CHARGE_POWER)
+            battery_discharge_power = user_input.get(CONF_BATTERY_DISCHARGE_POWER)
+            
+            # Store control entities (can be None/empty if skipped)
+            if battery_mode_select:
+                self._detected_entities[CONF_BATTERY_MODE_SELECT] = battery_mode_select
+            if battery_charge_power:
+                self._detected_entities[CONF_BATTERY_CHARGE_POWER] = battery_charge_power
+            if battery_discharge_power:
+                self._detected_entities[CONF_BATTERY_DISCHARGE_POWER] = battery_discharge_power
+            
+            _LOGGER.info("Battery control configured: mode=%s, charge_power=%s, discharge_power=%s",
+                         battery_mode_select or "none", battery_charge_power or "none", 
+                         battery_discharge_power or "none")
+            
+            # If mode select is configured, go to mode mapping step
+            if battery_mode_select:
+                return await self.async_step_mode_mapping()
+            
+            # Otherwise proceed directly to pricing
+            return await self.async_step_pricing()
+        
+        # Auto-detect battery control entities
+        return await self._show_battery_control_form()
+    
+    async def async_step_mode_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Map battery mode select options to standard modes (self_use, backup, force_charge)."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            # Store mode mappings
+            self._detected_entities[CONF_MODE_SELF_USE] = user_input.get(CONF_MODE_SELF_USE)
+            self._detected_entities[CONF_MODE_BACKUP] = user_input.get(CONF_MODE_BACKUP)
+            self._detected_entities[CONF_MODE_FORCE_CHARGE] = user_input.get(CONF_MODE_FORCE_CHARGE)
+            
+            _LOGGER.info("Mode mapping configured: self_use=%s, backup=%s, force_charge=%s",
+                         user_input.get(CONF_MODE_SELF_USE),
+                         user_input.get(CONF_MODE_BACKUP),
+                         user_input.get(CONF_MODE_FORCE_CHARGE))
+            
+            # Proceed to pricing configuration
+            return await self.async_step_pricing()
+        
+        # Get the mode select entity and fetch its available options
+        mode_select_entity = self._detected_entities.get(CONF_BATTERY_MODE_SELECT)
+        available_options = []
+        
+        if mode_select_entity:
+            # Try to get available options from the entity's state
+            state = self.hass.states.get(mode_select_entity)
+            if state and state.attributes:
+                available_options = state.attributes.get("options", [])
+                _LOGGER.info("Mode select entity %s has options: %s", mode_select_entity, available_options)
+        
+        # Try to auto-detect FoxESS default mappings
+        default_self_use = ""
+        default_backup = ""
+        default_force_charge = ""
+        
+        if available_options:
+            # Common FoxESS H3 mode names
+            for option in available_options:
+                option_lower = option.lower()
+                if "self" in option_lower and "use" in option_lower:
+                    default_self_use = option
+                elif "backup" in option_lower:
+                    default_backup = option
+                elif "force" in option_lower and "charge" in option_lower:
+                    default_force_charge = option
+        
+        from homeassistant.helpers import selector
+        
+        # Build schema with dropdowns if options are available
+        if available_options:
+            schema = {
+                vol.Required(
+                    CONF_MODE_SELF_USE,
+                    default=default_self_use,
+                    description=f"Select the mode option for '{BATTERY_MODE_NAMES['self_use']}'",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=available_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=True,
+                    )
+                ),
+                vol.Required(
+                    CONF_MODE_BACKUP,
+                    default=default_backup,
+                    description=f"Select the mode option for '{BATTERY_MODE_NAMES['backup']}'",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=available_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=True,
+                    )
+                ),
+                vol.Required(
+                    CONF_MODE_FORCE_CHARGE,
+                    default=default_force_charge,
+                    description=f"Select the mode option for '{BATTERY_MODE_NAMES['force_charge']}'",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=available_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=True,
+                    )
+                ),
+            }
+        else:
+            # Fallback to text inputs if we can't fetch options
+            schema = {
+                vol.Required(
+                    CONF_MODE_SELF_USE,
+                    default="Self Use",
+                    description=f"Enter the exact option value for '{BATTERY_MODE_NAMES['self_use']}'",
+                ): str,
+                vol.Required(
+                    CONF_MODE_BACKUP,
+                    default="Backup",
+                    description=f"Enter the exact option value for '{BATTERY_MODE_NAMES['backup']}'",
+                ): str,
+                vol.Required(
+                    CONF_MODE_FORCE_CHARGE,
+                    default="Force Charge",
+                    description=f"Enter the exact option value for '{BATTERY_MODE_NAMES['force_charge']}'",
+                ): str,
+            }
+        
+        return self.async_show_form(
+            step_id="mode_mapping",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "entity": mode_select_entity or "Unknown",
+                "options": ", ".join(available_options) if available_options else "Could not detect options",
+            },
+        )
     
     async def async_step_pricing(
         self, user_input: dict[str, Any] | None = None
@@ -1031,6 +1185,119 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="review",
             data_schema=vol.Schema(schema),
             errors={},
+        )
+
+    async def _show_battery_control_form(self) -> config_entries.FlowResult:
+        """Show battery control entity selection form (optional, can be skipped)."""
+        entity_registry = er.async_get(self.hass)
+        device_registry = dr.async_get(self.hass)
+        
+        # Get battery SoC entity to find associated device
+        battery_soc_entity = self._detected_entities.get(CONF_BATTERY_SOC_ENTITY)
+        
+        # Auto-detect battery control entities from device registry
+        detected_mode_select = None
+        detected_charge_power = None
+        detected_discharge_power = None
+        
+        if battery_soc_entity:
+            # Get device ID from battery SoC sensor
+            soc_entry = entity_registry.entities.get(battery_soc_entity)
+            if soc_entry and soc_entry.device_id:
+                device_id = soc_entry.device_id
+                device = device_registry.async_get(device_id)
+                
+                if device:
+                    _LOGGER.info("Found battery device: %s (%s)", 
+                                 device.name or device.name_by_user, device.manufacturer)
+                    
+                    # Scan all entities on this device
+                    for entry in entity_registry.entities.values():
+                        if entry.device_id != device_id or entry.disabled_by:
+                            continue
+                        
+                        entity_id = entry.entity_id
+                        entity_id_lower = entity_id.lower()
+                        
+                        # Look for mode select entity
+                        if entry.domain == "select" and not detected_mode_select:
+                            if any(keyword in entity_id_lower for keyword in ["mode", "work_mode", "battery_mode"]):
+                                detected_mode_select = entity_id
+                                _LOGGER.info("Detected battery mode select: %s", entity_id)
+                        
+                        # Look for charge power control
+                        if entry.domain == "number" and not detected_charge_power:
+                            if any(keyword in entity_id_lower for keyword in ["charge_power", "charge_limit", "max_charge"]):
+                                detected_charge_power = entity_id
+                                _LOGGER.info("Detected charge power control: %s", entity_id)
+                        
+                        # Look for discharge power control
+                        if entry.domain == "number" and not detected_discharge_power:
+                            if any(keyword in entity_id_lower for keyword in ["discharge_power", "discharge_limit", "max_discharge"]):
+                                detected_discharge_power = entity_id
+                                _LOGGER.info("Detected discharge power control: %s", entity_id)
+        
+        # Build selector options for each control type
+        from homeassistant.helpers import selector
+        
+        # Get all select entities (for mode selector)
+        all_select_entities = []
+        for entry in entity_registry.entities.values():
+            if entry.domain == "select" and not entry.disabled_by:
+                all_select_entities.append(entry.entity_id)
+        
+        # Get all number entities (for power controls)
+        all_number_entities = []
+        for entry in entity_registry.entities.values():
+            if entry.domain == "number" and not entry.disabled_by:
+                all_number_entities.append(entry.entity_id)
+        
+        # Build schema
+        schema = {}
+        
+        schema[vol.Optional(
+            CONF_BATTERY_MODE_SELECT,
+            default=detected_mode_select or "",
+            description="Battery mode select entity (e.g., select.battery_mode, select.work_mode). Leave empty to skip control."
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_select_entities if all_select_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+        
+        schema[vol.Optional(
+            CONF_BATTERY_CHARGE_POWER,
+            default=detected_charge_power or "",
+            description="Battery charge power control entity (e.g., number.battery_charge_power). Leave empty to skip."
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_number_entities if all_number_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+        
+        schema[vol.Optional(
+            CONF_BATTERY_DISCHARGE_POWER,
+            default=detected_discharge_power or "",
+            description="Battery discharge power control entity (e.g., number.battery_discharge_power). Leave empty to skip."
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_number_entities if all_number_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+        
+        return self.async_show_form(
+            step_id="battery_control",
+            data_schema=vol.Schema(schema),
+            errors={},
+            description_placeholders={
+                "info": "Configure battery control entities. These are optional - leave empty if you don't have battery control or want demo mode only."
+            },
         )
 
     async def _get_energy_prefs(self) -> dict[str, Any] | None:
