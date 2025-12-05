@@ -2197,7 +2197,6 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_DETECTED_ENTITIES: detected_entities,
                     CONF_BATTERY_CAPACITY: user_input.get(CONF_BATTERY_CAPACITY, DEFAULT_BATTERY_CAPACITY),
                     CONF_BATTERY_MAX_POWER: user_input.get(CONF_BATTERY_MAX_POWER, DEFAULT_BATTERY_MAX_POWER),
-                    CONF_BATTERY_CHARGE_MAX_POWER: user_input.get(CONF_BATTERY_CHARGE_MAX_POWER, DEFAULT_BATTERY_CHARGE_MAX_POWER),
                 }
                 
                 # Send battery configuration to backend
@@ -2276,20 +2275,94 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
             ): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=20.0)),
         }
         
-        # Battery control entities (for actual battery control via MPC)
-        # Note: These are optional if running in demo/dry-run mode
-        current_mode_select = detected_entities.get(CONF_BATTERY_MODE_SELECT, "")
-        current_charge_power = detected_entities.get(CONF_BATTERY_CHARGE_POWER, "")
-        current_discharge_power = detected_entities.get(CONF_BATTERY_DISCHARGE_POWER, "")
+        # Auto-detect battery control entities from battery device
+        battery_soc_entity = detected_entities.get(CONF_BATTERY_SOC_ENTITY)
+        detected_mode_select = None
+        detected_charge_power = None
+        detected_discharge_power = None
         
-        schema[vol.Optional(CONF_BATTERY_MODE_SELECT, default=current_mode_select, description="Battery Mode Select (optional in demo mode)")] = str
-        schema[vol.Optional(CONF_BATTERY_CHARGE_POWER, default=current_charge_power, description="Battery Charge Power Control (optional in demo mode)")] = str
-        schema[vol.Optional(CONF_BATTERY_DISCHARGE_POWER, default=current_discharge_power, description="Battery Discharge Power Control (optional in demo mode)")] = str
+        if battery_soc_entity:
+            # Get device ID from battery SoC sensor
+            soc_entry = entity_registry.entities.get(battery_soc_entity)
+            if soc_entry and soc_entry.device_id:
+                device_id = soc_entry.device_id
+                device_registry = dr.async_get(self.hass)
+                device = device_registry.async_get(device_id)
+                
+                if device:
+                    # Scan all entities on this device
+                    for entry in entity_registry.entities.values():
+                        if entry.device_id != device_id or entry.disabled_by:
+                            continue
+                        
+                        entity_id_lower = entry.entity_id.lower()
+                        
+                        # Look for mode select entity
+                        if entry.domain == "select" and not detected_mode_select:
+                            if any(keyword in entity_id_lower for keyword in ["mode", "work_mode", "battery_mode"]):
+                                detected_mode_select = entry.entity_id
+                        
+                        # Look for charge power control
+                        if entry.domain == "number" and not detected_charge_power:
+                            if any(keyword in entity_id_lower for keyword in ["charge_power", "charge_limit", "max_charge"]):
+                                detected_charge_power = entry.entity_id
+                        
+                        # Look for discharge power control
+                        if entry.domain == "number" and not detected_discharge_power:
+                            if any(keyword in entity_id_lower for keyword in ["discharge_power", "discharge_limit", "max_discharge"]):
+                                detected_discharge_power = entry.entity_id
+        
+        # Get all select and number entities for dropdowns
+        all_select_entities = [
+            entry.entity_id for entry in entity_registry.entities.values()
+            if entry.domain == "select" and not entry.disabled_by
+        ]
+        all_number_entities = [
+            entry.entity_id for entry in entity_registry.entities.values()
+            if entry.domain == "number" and not entry.disabled_by
+        ]
+        
+        # Use detected or current values
+        current_mode_select = detected_entities.get(CONF_BATTERY_MODE_SELECT) or detected_mode_select or ""
+        current_charge_power = detected_entities.get(CONF_BATTERY_CHARGE_POWER) or detected_charge_power or ""
+        current_discharge_power = detected_entities.get(CONF_BATTERY_DISCHARGE_POWER) or detected_discharge_power or ""
+        
+        # Add battery control entity selectors (optional - for actual battery control)
         schema[vol.Optional(
-            CONF_BATTERY_CHARGE_MAX_POWER,
-            default=current_config.get(CONF_BATTERY_CHARGE_MAX_POWER, DEFAULT_BATTERY_CHARGE_MAX_POWER),
-            description="Maximum charging power (kW)"
-        )] = vol.All(vol.Coerce(float), vol.Range(min=0.5, max=20.0))
+            CONF_BATTERY_MODE_SELECT,
+            default=current_mode_select,
+            description="OPTIONAL - Battery mode select for control"
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_select_entities if all_select_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+        
+        schema[vol.Optional(
+            CONF_BATTERY_CHARGE_POWER,
+            default=current_charge_power,
+            description="OPTIONAL - Charge power control entity"
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_number_entities if all_number_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+        
+        schema[vol.Optional(
+            CONF_BATTERY_DISCHARGE_POWER,
+            default=current_discharge_power,
+            description="OPTIONAL - Discharge power control entity"
+        )] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=all_number_entities if all_number_entities else [],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
 
         # Add entity selectors with values from detected_entities
         # Always show fields even if no entities detected (allow custom input)
@@ -2433,6 +2506,15 @@ class IntuiThermOptionsFlowHandler(config_entries.OptionsFlow):
             "battery_capacity_kwh": capacity_kwh,
             "battery_max_power_kw": max_power_kw
         }
+        
+        # Include battery control entities if configured (stored as device presets)
+        detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
+        if battery_mode := detected_entities.get(CONF_BATTERY_MODE_SELECT):
+            payload["ha_battery_mode_entity_id"] = battery_mode
+        if charge_power := detected_entities.get(CONF_BATTERY_CHARGE_POWER):
+            payload["ha_battery_charge_power_entity_id"] = charge_power
+        if discharge_power := detected_entities.get(CONF_BATTERY_DISCHARGE_POWER):
+            payload["ha_battery_discharge_power_entity_id"] = discharge_power
         
         async with session.post(url, json=payload, headers=headers) as response:
             if response.status not in [200, 201]:
