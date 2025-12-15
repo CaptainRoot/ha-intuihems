@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 import logging
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_DRY_RUN_MODE, CONF_DETECTED_ENTITIES
@@ -82,12 +82,8 @@ class BatteryControlExecutor:
             f"Starting battery control executor. Next execution: {self._next_execution}"
         )
         
-        # Schedule periodic execution every 15 minutes
-        self._cancel_timer = async_track_time_interval(
-            self.hass,
-            self._execute_control_callback,
-            CONTROL_INTERVAL,
-        )
+        # Schedule execution at the next aligned time
+        self._schedule_next_execution()
         
         # Also execute immediately if we're close to an aligned time
         now = dt_util.now()
@@ -122,9 +118,28 @@ class BatteryControlExecutor:
         
         return next_time
 
+    def _schedule_next_execution(self) -> None:
+        """Schedule execution at the next aligned time."""
+        if self._cancel_timer:
+            self._cancel_timer()
+        
+        self._next_execution = self._get_next_aligned_time()
+        
+        _LOGGER.debug(f"Scheduling next execution at {self._next_execution}")
+        
+        self._cancel_timer = async_track_point_in_time(
+            self.hass,
+            self._execute_control_callback,
+            self._next_execution,
+        )
+
     @callback
     def _execute_control_callback(self, now: datetime) -> None:
-        """Callback for periodic control execution."""
+        """Callback for control execution at aligned time."""
+        # Schedule next execution before running current one
+        self._schedule_next_execution()
+        
+        # Execute control
         self.hass.async_create_task(self._execute_control())
 
     async def _execute_control(self) -> None:
