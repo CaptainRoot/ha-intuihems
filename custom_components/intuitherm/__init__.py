@@ -96,7 +96,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if all([
         detected_entities.get(CONF_BATTERY_MODE_SELECT),
         detected_entities.get(CONF_BATTERY_CHARGE_POWER),
-        detected_entities.get(CONF_BATTERY_DISCHARGE_POWER),
     ]):
         _LOGGER.info("Battery control entities configured, initializing executor")
         battery_executor = BatteryControlExecutor(
