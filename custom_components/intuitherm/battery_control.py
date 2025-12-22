@@ -158,7 +158,7 @@ class BatteryControlExecutor:
         try:
             # Refresh coordinator data to get latest control plan from backend
             # This ensures we have the freshest plan that was generated 3 minutes ago by MPC
-            _LOGGER.debug("Refreshing coordinator data before execution")
+            _LOGGER.info("Refreshing coordinator data before execution")
             await self.coordinator.async_request_refresh()
             
             # Check if automatic control is enabled
@@ -199,7 +199,7 @@ class BatteryControlExecutor:
             aligned_minute = (current_minute // 15) * 15
             current_aligned = now.replace(minute=aligned_minute, second=0, microsecond=0)
             
-            _LOGGER.debug(f"Looking for control at aligned time: {current_aligned}")
+            _LOGGER.info(f"Looking for control at aligned time: {current_aligned}")
             
             for control in controls:
                 control_time_str = control.get("target_timestamp")
@@ -219,11 +219,11 @@ class BatteryControlExecutor:
                 
                 if time_diff < 30:  # 30 seconds tolerance for exact match
                     target_control = control
-                    _LOGGER.debug(f"Found matching control for {current_aligned}: {control.get('control_action')}")
+                    _LOGGER.info(f"Found matching control for {current_aligned}: {control.get('control_action')}")
                     break
             
             if not target_control:
-                _LOGGER.debug(f"No control found for current time {now}")
+                _LOGGER.info(f"No control found for current time {now}")
                 return
             
             # Execute the control
