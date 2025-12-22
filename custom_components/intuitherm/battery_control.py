@@ -283,18 +283,25 @@ class BatteryControlExecutor:
                 
                 # Set charge power
                 if self.battery_charge_power:
-                    # Convert kW to W for FoxESS
-                    power_w = int(power_kw * 1000)
+                    # Convert kW to Amperes for FoxESS max_charge_current
+                    # FoxESS battery systems typically operate at ~250V DC
+                    # Power (kW) = Voltage (V) × Current (A) / 1000
+                    # Current (A) = Power (kW) × 1000 / Voltage (V)
+                    battery_voltage = 250  # V (typical for FoxESS home battery systems)
+                    current_a = (power_kw * 1000) / battery_voltage
+                    # Clamp to valid range (0-50A for FoxESS)
+                    current_a = max(0, min(50, current_a))
                     
                     await self.hass.services.async_call(
                         "number",
                         "set_value",
                         {
                             "entity_id": self.battery_charge_power,
-                            "value": power_w,
+                            "value": round(current_a, 1),
                         },
                         blocking=True,
                     )
+                    _LOGGER.debug(f"Converted {power_kw}kW to {current_a:.1f}A (@ {battery_voltage}V)")
                 
                 _LOGGER.info(f"Applied Force Charge mode ({self.mode_force_charge}) with {power_kw}kW")
                 
