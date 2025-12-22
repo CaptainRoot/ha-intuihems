@@ -156,6 +156,11 @@ class BatteryControlExecutor:
         self._next_execution = self._get_next_aligned_time()
         
         try:
+            # Refresh coordinator data to get latest control plan from backend
+            # This ensures we have the freshest plan that was generated 3 minutes ago by MPC
+            _LOGGER.debug("Refreshing coordinator data before execution")
+            await self.coordinator.async_request_refresh()
+            
             # Check if automatic control is enabled
             control_data = self.coordinator.data.get("control", {}) if self.coordinator.data else {}
             
