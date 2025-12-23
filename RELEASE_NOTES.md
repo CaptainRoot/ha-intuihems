@@ -1,3 +1,188 @@
+# Release Notes - v2025.12.22.3
+
+## 🐛 Critical Fix: 15-Minute Execution Timing Bug
+
+This release fixes a critical timing issue where battery controls were executing 15 minutes late, causing missed optimization opportunities and higher energy costs.
+
+### The Problem
+
+- **Battery charged at wrong times**: If MPC calculated optimal charge at 10:45, battery would charge at 11:00 instead
+- **Root cause**: MPC ran at quarter hours (10:45) and generated controls starting at 10:45, but by the time executor fetched them, 10:45 had passed
+- **Result**: Executor would skip to next control (11:00), missing the optimal window
+
+### The Fix
+
+Three coordinated changes across backend and Home Assistant integration:
+
+1. **Backend MPC Scheduler** (energy-management-service):
+   - Now runs **3 minutes BEFORE** quarter hours (:42, :57, :12, :27)
+   - Generates controls for the NEXT quarter hour (not current)
+   - Example: MPC at 10:42 generates controls starting at 10:45
+
+2. **Backend API** (control plan endpoint):
+   - Includes controls from last 5 minutes (not just future)
+   - Handles network latency and clock sync differences
+   - Executor can now find controls even if fetched slightly after quarter hour
+
+3. **HA Integration Executor**:
+   - Triggers on-demand coordinator refresh before execution
+   - Ensures fresh control plan data at execution time
+   - Improved logging (DEBUG → INFO) for better visibility
+
+### Impact
+
+✅ Battery now charges/discharges at **exact optimal times** calculated by MPC  
+✅ No more 15-minute delays that caused missed cheap electricity windows  
+✅ Controls execute within 1 second of target time (:00, :15, :30, :45)
+
+## 🚀 Major Feature: Automatic Battery Control
+
+The integration now **automatically controls your battery** based on MPC optimization:
+
+### Battery Control Executor
+
+- Executes control decisions every 15 minutes (:00, :15, :30, :45)
+- Supports three battery modes:
+  - **Self Use**: Battery charges from solar, powers house loads
+  - **Backup**: Battery reserved for backup power (no grid charging)
+  - **Force Charge**: Active grid charging at specified power level
+- Sends execution feedback to backend for closed-loop optimization
+- Configurable mode mappings for different inverter brands
+
+### Setup Configuration
+
+Enhanced configuration flow with:
+- **Battery control entity selection**: Choose work mode and charge current entities
+- **Mode mapping**: Map MPC control actions to your inverter's mode names
+- **Auto-detection**: Automatically finds FoxESS, SolarEdge, and other inverter entities
+- **Validation**: Ensures all required entities are selected and valid
+
+### Safety Features
+
+- Respects battery SOC limits (min/max configured in backend)
+- Allows operation even when battery is below minimum (prevents infeasibility)
+- Proper unit handling: kW power setpoints converted to Amperes for FoxESS
+- Only executes controls from the latest MPC run (prevents stale controls)
+
+## 🔧 Major Improvements
+
+### MPC Optimization
+
+- **Grid export disabled**: Prevents unbounded optimization solutions
+- **DCP-compliant constraints**: Ensures convex optimization problem
+- **Solar opportunity cost**: Penalizes grid charging during solar surplus hours
+- **Better handling of edge cases**: Works when battery SOC is below minimum
+
+### Configuration UI
+
+- **Simplified setup flow**: Removed confusing fields (update_interval, battery_discharge_power)
+- **Better field descriptions**: Clear explanations for each configuration option
+- **Reordered fields**: Energy sensors grouped together, battery control grouped together
+- **Dropdown selectors**: All entity selections use consistent dropdown UI
+- **Options flow**: Full reconfiguration without deleting/re-adding integration
+
+### Sensor Data Collection
+
+- **Fixed cumulative sensor handling**: Solar energy totals properly converted to power
+- **Category-based queries**: Sensors queried by category instead of hardcoded IDs
+- **Unit conversions**: Automatic W → kW conversion where needed
+- **Outlier filtering**: Removes spurious solar spikes from data
+
+### Timezone Handling
+
+- **All displays in local time**: Next Control sensor shows local time (not UTC)
+- **Proper timezone conversions**: Backend uses UTC, HA displays in local timezone
+- **Aligned execution times**: Controls execute at exact quarter hours in user's timezone
+
+## 📚 Documentation Updates
+
+- **README_HA_INTEGRATION.md**: Complete installation and setup guide
+- **English README.md**: HACS-ready documentation
+- **Comprehensive field descriptions**: In-app help text for all configuration options
+- **Architecture documentation**: System design and optimization details
+
+## 🔐 Security & Privacy
+
+- **Personalized setup flow**: Optional email opt-in for updates
+- **Consent tracking**: Privacy preferences stored and respected
+- **HTTPS by default**: All API communication encrypted
+- **Bearer token authentication**: Secure API key handling
+
+## 🐛 Bug Fixes
+
+- Fixed duplicate control execution from multiple MPC runs
+- Fixed control timestamp alignment (quarter-hour boundaries)
+- Fixed database migration conflicts in production
+- Fixed sensor validation warnings for non-entity config keys
+- Fixed setup flow showing no fields when auto-detection fails
+- Fixed spurious PV spike data corruption
+- Fixed forecast queries missing user_id filter
+
+## 📊 Technical Details
+
+### Version History
+- **v2025.12.22.3**: Control plan API 5-minute lookback fix
+- **v2025.12.22.2**: Executor logging improvements
+- **v2025.12.22.1**: MPC 3-minute lead time implementation
+- **v2025.12.05.3**: Battery mode mapping in options flow
+- **v2025.12.05.2**: Configuration UI improvements
+- **v2025.12.05.1**: Battery control entity storage
+
+### Backend Changes
+- MPC runner: Configurable lead time (3 minutes before quarter hour)
+- Control plan API: Time window includes last 5 minutes
+- Database: Proper cascade deletes for control plans
+- Forecast generation: Improved solar data handling
+
+### Integration Changes
+- Battery control executor: On-demand coordinator refresh
+- Coordinator: 5-minute polling interval (was 1 minute)
+- Config flow: Comprehensive validation and auto-detection
+- Sensors: Better state handling and timezone display
+
+## 🚀 Upgrade Instructions
+
+### For Existing Installations
+
+1. **Update integration** via HACS or manual git pull
+2. **Restart Home Assistant**
+3. **Battery control setup** (if not already configured):
+   - Go to Settings → Devices & Services → intuiHEMS
+   - Click "Configure"
+   - Select battery control entities (work mode, charge current)
+   - Map control modes to your inverter's mode names
+   - Complete the flow
+
+4. **Verify execution** (check logs):
+   ```
+   Settings → System → Logs → Filter: "intuitherm"
+   Look for: "Successfully executed control: X"
+   ```
+
+### For New Installations
+
+Just add the integration - all new features are enabled by default!
+
+## ⚠️ Breaking Changes
+
+None - all changes are backward compatible. Existing configurations will continue to work.
+
+## 🎯 What's Next?
+
+- **Adaptive MPC**: Learn from execution feedback to improve forecasts
+- **Price forecasting**: Integrate dynamic electricity price predictions
+- **Multi-battery support**: Optimize multiple battery systems
+- **Advanced visualizations**: Real-time optimization dashboard
+
+---
+
+**Questions or Issues?**
+- Documentation: https://github.com/intui/intuiHEMS
+- Report bugs: https://github.com/intui/intuiHEMS/issues
+- Discussion: https://github.com/intui/intuiHEMS/discussions
+
+---
+
 # Release Notes - v2025.11.13.1
 
 ## 🎉 Major Feature: Live Forecast Dashboard
