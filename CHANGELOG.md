@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local compute mode (optional offline operation)
 - Email notifications for important events
 
+## [2026.01.13.1] - 2026-01-13
+
+### Changed
+- **Polling Interval**: Increased update interval from 5 minutes to 15 minutes
+  - Reduces API calls and backend load
+  - Better aligns with MPC optimization cycle
+- **Time Alignment**: Updates now aligned to quarter-hour marks (:00, :15, :30, :45)
+  - Ensures consistent timing across all installations
+  - Improves data quality for time-series analysis
+  - First update after restart aligns to next quarter-hour mark
+
 ## [2025.11.13.4] - 2025-11-13
 
 ### Added

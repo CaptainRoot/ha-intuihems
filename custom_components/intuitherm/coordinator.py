@@ -67,10 +67,55 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
             self.service_url,
             update_interval,
         )
+        
+        # Schedule first update aligned to quarter-hour (:00, :15, :30, :45)
+        self._align_to_quarter_hour()
+
+    def _align_to_quarter_hour(self) -> None:
+        """Calculate and schedule next update at :00, :15, :30, or :45 of the hour."""
+        from datetime import datetime
+        
+        now = datetime.now()
+        current_minute = now.minute
+        current_second = now.second
+        
+        # Find next quarter hour mark (0, 15, 30, 45)
+        quarter_hours = [0, 15, 30, 45]
+        next_quarter = None
+        
+        for qh in quarter_hours:
+            if current_minute < qh or (current_minute == qh and current_second < 30):
+                next_quarter = qh
+                break
+        
+        # If no quarter found in current hour, use :00 of next hour
+        if next_quarter is None:
+            next_quarter = 0
+            minutes_until_next = 60 - current_minute
+        else:
+            minutes_until_next = next_quarter - current_minute
+        
+        seconds_until_next = minutes_until_next * 60 - current_second
+        
+        _LOGGER.info(
+            "⏰ Next update aligned to :%02d (in %d seconds)",
+            next_quarter,
+            seconds_until_next
+        )
+        
+        # Override the update interval for the next update
+        if seconds_until_next > 0:
+            self.update_interval = timedelta(seconds=seconds_until_next)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from IntuiTherm service."""
         _LOGGER.info("🔄 Coordinator update cycle started")
+        
+        # After first aligned update, reset to 15-minute intervals
+        # This keeps updates at :00, :15, :30, :45
+        if self.update_interval.total_seconds() != 900:
+            self.update_interval = timedelta(seconds=900)
+            _LOGGER.debug("Update interval reset to 15 minutes")
 
         try:
             # Register sensors on first run

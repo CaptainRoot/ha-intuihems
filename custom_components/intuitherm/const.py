@@ -86,7 +86,7 @@ CONF_DRY_RUN_MODE: Final = "dry_run_mode"  # Test mode - MPC runs but doesn't se
 
 # Default values
 DEFAULT_SERVICE_URL: Final = "https://api.intuihems.de"
-DEFAULT_UPDATE_INTERVAL: Final = 300  # seconds (5 minutes)
+DEFAULT_UPDATE_INTERVAL: Final = 900  # seconds (15 minutes)
 # Battery executor triggers on-demand refresh before each control execution
 DEFAULT_BATTERY_CAPACITY: Final = 10.0  # kWh
 DEFAULT_BATTERY_MAX_POWER: Final = 3.0  # kW
