@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 import aiohttp
+import numpy as np
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -458,6 +459,69 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("⚠️ Historic backfill error: %s", err, exc_info=True)
 
+    def _interpolate_to_quarter_hours(self, readings: list[dict]) -> list[dict]:
+        """Interpolate readings to quarter-hour marks (:00, :15, :30, :45).
+        
+        For cumulative sensors, linear interpolation is valid.
+        Returns aligned readings at quarter-hour marks within the data range.
+        """
+        if not readings or len(readings) < 2:
+            return readings
+        
+        # Sort by timestamp
+        sorted_readings = sorted(readings, key=lambda r: datetime.fromisoformat(r["timestamp"]))
+        
+        # Extract timestamps and values as numpy arrays
+        timestamps = [datetime.fromisoformat(r["timestamp"]) for r in sorted_readings]
+        timestamps_unix = np.array([ts.timestamp() for ts in timestamps])
+        values = np.array([r["value"] for r in sorted_readings])
+        
+        # Determine time range
+        start_time = timestamps[0]
+        end_time = timestamps[-1]
+        
+        # Generate quarter-hour marks
+        quarter_hour_marks = []
+        current = start_time.replace(second=0, microsecond=0)
+        
+        # Align to next quarter hour
+        minute = current.minute
+        if minute % 15 != 0:
+            minute = ((minute // 15) + 1) * 15
+            if minute >= 60:
+                current = current.replace(minute=0) + timedelta(hours=1)
+            else:
+                current = current.replace(minute=minute)
+        
+        # Generate all quarter-hour marks in the range
+        while current <= end_time:
+            if current >= start_time:
+                quarter_hour_marks.append(current)
+            current += timedelta(minutes=15)
+        
+        if not quarter_hour_marks:
+            return readings
+        
+        # Interpolate values at quarter-hour marks
+        qh_timestamps_unix = np.array([qh.timestamp() for qh in quarter_hour_marks])
+        interpolated_values = np.interp(qh_timestamps_unix, timestamps_unix, values)
+        
+        # Create interpolated readings
+        interpolated_readings = [
+            {
+                "timestamp": qh.isoformat(),
+                "value": float(val)
+            }
+            for qh, val in zip(quarter_hour_marks, interpolated_values)
+        ]
+        
+        _LOGGER.debug(
+            "Interpolated %d raw readings to %d quarter-hour marks",
+            len(readings), len(interpolated_readings)
+        )
+        
+        return interpolated_readings
+
     async def _backfill_historic_data(self) -> bool:
         """Backfill up to 7 days of historic sensor data on first run.
         
@@ -629,6 +693,15 @@ class IntuiThermCoordinator(DataUpdateCoordinator):
                             )
                             if unit: # Found valid attributes
                                 break
+                
+                # For cumulative sensors, interpolate to quarter-hour marks
+                if is_cumulative and len(readings) >= 2:
+                    original_count = len(readings)
+                    readings = self._interpolate_to_quarter_hours(readings)
+                    _LOGGER.info(
+                        "Interpolated %s: %d raw readings → %d quarter-hour readings",
+                        entity_id, original_count, len(readings)
+                    )
 
                 # Send in smaller batches (25 readings per batch)
                 batch_size = 25
