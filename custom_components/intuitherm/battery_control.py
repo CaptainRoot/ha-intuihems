@@ -294,14 +294,16 @@ class BatteryControlExecutor:
                     power_watts = int(power_kw * 1000)  # Convert kW to Watts
                     power_watts = max(1000, min(50000, power_watts))  # Clamp to 1-50kW
                     
-                    device_id = detected_entities.get("device_id")
+                    ha_device_id = detected_entities.get("ha_device_id")
+                    if not ha_device_id:
+                        _LOGGER.error("No Huawei battery device ID found - cannot call forcible_charge service")
+                        return
+                    
                     service_data = {
+                        "device_id": ha_device_id,  # HA device registry ID
                         "duration": 16,  # 16 minutes (slightly longer than 15min control interval)
                         "power": power_watts,
                     }
-                    
-                    if device_id:
-                        service_data["device_id"] = device_id
                     
                     await self.hass.services.async_call(
                         "huawei_solar",

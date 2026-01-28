@@ -1972,10 +1972,25 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                         break
         
-        # Store device_id for Huawei service calls
-        if platform.lower() == "huawei_solar" and device.id:
-            control_entities["device_id"] = device.id
-            _LOGGER.info("Stored Huawei device ID: %s", device.id)
+        # For Huawei: explicitly find the battery device ID by looking up which device
+        # owns the grid_charge_switch entity (battery-specific entity)
+        if platform.lower() == "huawei_solar" and control_entities.get("grid_charge_switch"):
+            grid_switch_entity_id = control_entities["grid_charge_switch"]
+            grid_switch_entry = entity_registry.entities.get(grid_switch_entity_id)
+            
+            if grid_switch_entry and grid_switch_entry.device_id:
+                # Get the battery device from the entity registry
+                from homeassistant.helpers import device_registry as dr
+                device_registry = dr.async_get(entity_registry.hass)
+                battery_device = device_registry.async_get(grid_switch_entry.device_id)
+                
+                if battery_device:
+                    control_entities["ha_device_id"] = battery_device.id
+                    _LOGGER.info(
+                        "Stored Huawei battery device ID: %s (device: %s)",
+                        battery_device.id,
+                        battery_device.name_by_user or battery_device.name
+                    )
         
         return control_entities
 

@@ -5,6 +5,16 @@ All notable changes to the intuiHEMS Home Assistant integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026.01.28.2] - 2026-01-28
+
+### Fixed
+- **Huawei battery device ID detection**: Now correctly identifies battery device by looking up which device owns the `grid_charge_switch` entity, instead of using the inverter device ID. This fixes the "Not a valid 'Connected Energy Storage' device" error when calling `forcible_charge` service.
+- **Config flow logging**: Changed false ERROR level logs to INFO during setup entry initialization
+- **German translation**: Added missing `{user_name}` placeholder to welcome message title
+
+### Changed
+- Device ID detection now explicitly queries entity registry to find the actual battery device, ensuring correct device is passed to Huawei Solar `forcible_charge` service
+
 ## [Unreleased]
 
 ### Planned
