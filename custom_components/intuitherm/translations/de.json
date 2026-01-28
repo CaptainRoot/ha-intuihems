@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "intuiHEMS Energieoptimierung v{version}",
+        "title": "Hallo {user_name}! 👋 Willkommen bei intuiHEMS v{version}",
         "description": "Dieser Einrichtungsassistent wird:\n\n🔍 Ihre Energiegeräte automatisch erkennen\n   • Batteriesysteme\n   • Solarwechselrichter\n   • Netzzähler\n\n📊 Die besten Sensoren zur Überwachung finden\n   • Kumulative Energiezähler (kWh) - am zuverlässigsten\n   • Batterieladezustand (%)\n   • Leistungssensoren (kW) - Fallback\n\n⚡ Batterieoptimierung aktivieren\n   • Intelligentes Laden in günstigen Stunden\n   • Maximierung des Solar-Eigenverbrauchs\n   • Minimierung der Netzkosten\n\nVoraussetzungen:\n• Home Assistant Energie-Dashboard konfiguriert\n• Batterie/Solar/Netz-Geräte integriert\n\nDie Einrichtung dauert ca. 2 Minuten."
       },
       "show_user_id": {

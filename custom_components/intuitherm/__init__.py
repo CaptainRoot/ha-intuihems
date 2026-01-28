@@ -40,11 +40,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up IntuiTherm from a config entry."""
     try:
-        _LOGGER.error("=" * 80)
-        _LOGGER.error("🚀 INTUITHERM ASYNC_SETUP_ENTRY CALLED")
-        _LOGGER.error("Entry ID: %s", entry.entry_id)
-        _LOGGER.error("Entry data keys: %s", list(entry.data.keys()))
-        _LOGGER.error("=" * 80)
+        _LOGGER.info("=" * 80)
+        _LOGGER.info("🚀 INTUITHERM ASYNC_SETUP_ENTRY CALLED")
+        _LOGGER.info("Entry ID: %s", entry.entry_id)
+        _LOGGER.info("Entry data keys: %s", list(entry.data.keys()))
+        _LOGGER.info("=" * 80)
         
         # Merge entry.data and entry.options (options take precedence)
         config = {**entry.data, **entry.options}
