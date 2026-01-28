@@ -266,6 +266,10 @@ class BatteryControlExecutor:
         """
         Apply battery control to HA entities.
         
+        Detects inverter type and uses appropriate control method:
+        - Huawei: Uses forcible_charge service (required for physical charging)
+        - Other brands: Uses direct mode/power entity control
+        
         Args:
             mode: Control mode (force_charge, self_use, backup)
             power_kw: Power setpoint in kW
@@ -274,64 +278,224 @@ class BatteryControlExecutor:
             True if successful, False otherwise
         """
         try:
+            detected_entities = self.config.get(CONF_DETECTED_ENTITIES, {})
+            
+            # Detect if this is a Huawei system by checking for grid_charge_switch
+            # This entity is only present on Huawei Solar integration
+            is_huawei = detected_entities.get("grid_charge_switch") is not None
+            
             if mode == "force_charge":
-                # Set to Force Charge mode
-                await self.hass.services.async_call(
-                    "select",
-                    "select_option",
-                    {
-                        "entity_id": self.battery_mode_select,
-                        "option": self.mode_force_charge,
-                    },
-                    blocking=True,
-                )
-                
-                # Set charge power
-                if self.battery_charge_power:
-                    # Use power in kW directly for max_charge_current
-                    # The entity expects kW (e.g., 3.0 for 3kW)
-                    power_value = max(0, min(50, power_kw))  # Clamp to 0-50kW
+                if is_huawei:
+                    # Huawei-specific procedure using forcible_charge service
+                    # Based on: https://community.simon42.com/t/stromspeicher-vom-netz-laden-bei-guenstigen-preisen-tibber/16194/50
+                    _LOGGER.info(f"Using Huawei forcible charge procedure for {power_kw}kW")
+                    
+                    # Step 1: Start forcible charge with power and duration
+                    power_watts = int(power_kw * 1000)  # Convert kW to Watts
+                    power_watts = max(1000, min(50000, power_watts))  # Clamp to 1-50kW
+                    
+                    device_id = detected_entities.get("device_id")
+                    service_data = {
+                        "duration": 16,  # 16 minutes (slightly longer than 15min control interval)
+                        "power": power_watts,
+                    }
+                    
+                    if device_id:
+                        service_data["device_id"] = device_id
                     
                     await self.hass.services.async_call(
-                        "number",
-                        "set_value",
+                        "huawei_solar",
+                        "forcible_charge",
+                        service_data,
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.debug(f"Called huawei_solar.forcible_charge with {power_watts}W for 16 minutes")
+                    await asyncio.sleep(5)
+                    
+                    # Step 2: Set battery mode to fixed_charge_discharge
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
                         {
-                            "entity_id": self.battery_charge_power,
-                            "value": round(power_value, 2),
+                            "entity_id": self.battery_mode_select,
+                            "option": "fixed_charge_discharge",
                         },
                         blocking=True,
                     )
-                    _LOGGER.debug(f"Setting charge power to {power_value}kW")
+                    
+                    _LOGGER.debug("Set battery mode to fixed_charge_discharge")
+                    await asyncio.sleep(5)
+                    
+                    # Step 3: Enable grid charging switch
+                    grid_charge_switch = detected_entities.get("grid_charge_switch")
+                    if grid_charge_switch:
+                        await self.hass.services.async_call(
+                            "switch",
+                            "turn_on",
+                            {
+                                "entity_id": grid_charge_switch,
+                            },
+                            blocking=True,
+                        )
+                        _LOGGER.info(f"Enabled grid charging switch: {grid_charge_switch}")
+                    
+                    _LOGGER.info(f"Applied Huawei forcible charge: {power_kw}kW ({power_watts}W)")
                 
-                _LOGGER.info(f"Applied Force Charge mode ({self.mode_force_charge}) with {power_kw}kW")
+                else:
+                    # Generic procedure for non-Huawei systems (FoxESS, Solis, etc.)
+                    _LOGGER.info(f"Using generic force charge for {power_kw}kW")
+                    
+                    # Set to Force Charge mode
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": self.battery_mode_select,
+                            "option": self.mode_force_charge,
+                        },
+                        blocking=True,
+                    )
+                    
+                    # Set charge power if entity exists
+                    if self.battery_charge_power:
+                        power_value = max(0, min(50, power_kw))  # Clamp to 0-50kW
+                        
+                        await self.hass.services.async_call(
+                            "number",
+                            "set_value",
+                            {
+                                "entity_id": self.battery_charge_power,
+                                "value": round(power_value, 2),
+                            },
+                            blocking=True,
+                        )
+                        _LOGGER.debug(f"Set charge power to {power_value}kW")
+                    
+                    _LOGGER.info(f"Applied Force Charge mode ({self.mode_force_charge}) with {power_kw}kW")
                 
             elif mode == "self_use":
-                # Set to Self Use mode
-                await self.hass.services.async_call(
-                    "select",
-                    "select_option",
-                    {
-                        "entity_id": self.battery_mode_select,
-                        "option": self.mode_self_use,
-                    },
-                    blocking=True,
-                )
+                if is_huawei:
+                    # Huawei-specific procedure to stop forcible charge
+                    _LOGGER.info("Using Huawei stop forcible charge procedure")
+                    
+                    # Step 1: Disable grid charging switch
+                    grid_charge_switch = detected_entities.get("grid_charge_switch")
+                    if grid_charge_switch:
+                        await self.hass.services.async_call(
+                            "switch",
+                            "turn_off",
+                            {
+                                "entity_id": grid_charge_switch,
+                            },
+                            blocking=True,
+                        )
+                        _LOGGER.debug(f"Disabled grid charging switch: {grid_charge_switch}")
+                    
+                    await asyncio.sleep(5)
+                    
+                    # Step 2: Set battery mode to maximise_self_consumption
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": self.battery_mode_select,
+                            "option": "maximise_self_consumption",
+                        },
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.debug("Set battery mode to maximise_self_consumption")
+                    await asyncio.sleep(5)
+                    
+                    # Step 3: Stop forcible charge
+                    device_id = detected_entities.get("device_id")
+                    service_data = {}
+                    if device_id:
+                        service_data["device_id"] = device_id
+                    
+                    await self.hass.services.async_call(
+                        "huawei_solar",
+                        "stop_forcible_charge",
+                        service_data,
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.info("Applied Self Use mode (stopped Huawei forcible charge)")
                 
-                _LOGGER.info(f"Applied Self Use mode ({self.mode_self_use})")
+                else:
+                    # Generic procedure for non-Huawei systems
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": self.battery_mode_select,
+                            "option": self.mode_self_use,
+                        },
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.info(f"Applied Self Use mode ({self.mode_self_use})")
                 
             elif mode == "backup":
-                # Set to Backup mode (preserves battery)
-                await self.hass.services.async_call(
-                    "select",
-                    "select_option",
-                    {
-                        "entity_id": self.battery_mode_select,
-                        "option": self.mode_backup,
-                    },
-                    blocking=True,
-                )
+                if is_huawei:
+                    # Huawei-specific procedure
+                    _LOGGER.info("Using Huawei backup mode procedure")
+                    
+                    # Stop forcible charge first
+                    grid_charge_switch = detected_entities.get("grid_charge_switch")
+                    if grid_charge_switch:
+                        await self.hass.services.async_call(
+                            "switch",
+                            "turn_off",
+                            {
+                                "entity_id": grid_charge_switch,
+                            },
+                            blocking=True,
+                        )
+                    
+                    await asyncio.sleep(5)
+                    
+                    # Set to backup mode (maximise self consumption, battery stays reserved)
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": self.battery_mode_select,
+                            "option": "maximise_self_consumption",
+                        },
+                        blocking=True,
+                    )
+                    
+                    await asyncio.sleep(5)
+                    
+                    device_id = detected_entities.get("device_id")
+                    service_data = {}
+                    if device_id:
+                        service_data["device_id"] = device_id
+                    
+                    await self.hass.services.async_call(
+                        "huawei_solar",
+                        "stop_forcible_charge",
+                        service_data,
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.info("Applied Backup mode (stopped Huawei forcible charge)")
                 
-                _LOGGER.info(f"Applied Backup mode ({self.mode_backup})")
+                else:
+                    # Generic procedure for non-Huawei systems
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": self.battery_mode_select,
+                            "option": self.mode_backup,
+                        },
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.info(f"Applied Backup mode ({self.mode_backup})")
             
             else:
                 _LOGGER.error(f"Unknown control mode: {mode}")

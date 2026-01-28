@@ -491,6 +491,15 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             self._detected_entities[CONF_BATTERY_DISCHARGE_POWER] = control_entities[
                                 CONF_BATTERY_DISCHARGE_POWER
                             ]
+                        # Optional Huawei-specific entities
+                        if control_entities.get("grid_charge_switch"):
+                            self._detected_entities["grid_charge_switch"] = control_entities[
+                                "grid_charge_switch"
+                            ]
+                        if control_entities.get("device_id"):
+                            self._detected_entities["device_id"] = control_entities[
+                                "device_id"
+                            ]
                     
                     # Log what we found on this device
                     _LOGGER.info("  Found on device:")
@@ -1950,6 +1959,23 @@ class IntuiThermConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             pattern,
                         )
                         break
+            
+            # Look for grid charge switch (Huawei specific)
+            if entry.domain == "switch" and not control_entities.get("grid_charge_switch"):
+                for pattern in mapping.get("grid_charge_switch_patterns", []):
+                    if pattern.lower() in entity_lower:
+                        control_entities["grid_charge_switch"] = entry.entity_id
+                        _LOGGER.info(
+                            "Detected grid charge switch: %s (pattern=%s)",
+                            entry.entity_id,
+                            pattern,
+                        )
+                        break
+        
+        # Store device_id for Huawei service calls
+        if platform.lower() == "huawei_solar" and device.id:
+            control_entities["device_id"] = device.id
+            _LOGGER.info("Stored Huawei device ID: %s", device.id)
         
         return control_entities
 

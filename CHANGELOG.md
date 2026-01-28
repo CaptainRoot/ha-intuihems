@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local compute mode (optional offline operation)
 - Email notifications for important events
 
+## [2026.01.28.1] - 2026-01-28
+
+### Fixed
+- **Huawei Battery Control**: Implemented proper forcible charge procedure for Huawei Luna2000 batteries
+  - Now uses `huawei_solar.forcible_charge` service instead of direct entity control
+  - Follows 3-step procedure: service call → mode select → grid charge switch
+  - Fixes issue where Huawei batteries received commands but didn't physically charge
+  - Based on community-validated procedure from Huawei Solar users
+  - 5-second delays between steps for reliable operation
+
+### Changed
+- **Battery Control Detection**: Enhanced entity detection for Huawei-specific controls
+  - Auto-detects `grid_charge_switch` entity (Huawei only)
+  - Auto-detects `device_id` for Huawei service calls
+  - Detection is optional and backward compatible
+
+### Compatibility
+- ✅ **Fully backward compatible** - No impact on existing FoxESS, Solis, SolarEdge, or Growatt systems
+- ✅ **Automatic detection** - Huawei systems identified by presence of grid charge switch
+- ✅ **Dual-mode operation** - Huawei uses service calls, other brands use direct control
+
 ## [2026.01.13.1] - 2026-01-13
 
 ### Changed

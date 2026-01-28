@@ -154,9 +154,11 @@ DEVICE_CONTROL_MAPPINGS: Final = {
     },
     # Huawei FusionSolar
     ("huawei_solar", "Huawei", None): {
-        "mode_select_patterns": ["storage_working_mode", "battery_working_mode"],
-        "charge_power_patterns": ["storage_maximum_charging_power"],
-        "discharge_power_patterns": ["storage_maximum_discharging_power"],
+        "mode_select_patterns": ["storage_working_mode", "battery_working_mode", "betriebsmodus"],
+        "charge_power_patterns": ["storage_maximum_charging_power", "ladeleistung"],
+        "discharge_power_patterns": ["storage_maximum_discharging_power", "entladeleistung"],
+        "grid_charge_switch_patterns": ["laden_aus_dem_netz", "charge_from_grid"],
+        "device_id_patterns": [""],  # Huawei device ID for service calls
     },
     # Growatt systems
     ("growatt_server", "Growatt", None): {
