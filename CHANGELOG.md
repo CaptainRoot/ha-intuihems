@@ -5,6 +5,23 @@ All notable changes to the intuiHEMS Home Assistant integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026.01.29.4] - 2026-01-29
+
+### Added
+- **Automatic migration for existing Huawei installations**
+  - Detects if ha_device_id is missing on startup (installations from before v2026.01.28.2)
+  - Automatically queries entity/device registry to find battery device ID
+  - Updates config entry with ha_device_id without requiring reconfiguration
+  - Logs migration success/failure for debugging
+  - Fixes: "No Huawei battery device ID found - cannot call forcible_charge service"
+
+### Technical Details
+- Migration runs in __init__.py during async_setup_entry
+- Checks: is_huawei AND ha_device_id missing
+- Looks up grid_charge_switch entity to find owning device
+- Calls hass.config_entries.async_update_entry to persist ha_device_id
+- No user action required - automatic on next HA restart or integration reload
+
 ## [2026.01.29.3] - 2026-01-29
 
 ### Fixed

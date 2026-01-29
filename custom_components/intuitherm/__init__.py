@@ -90,9 +90,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_UNSUB: [],
     }
 
+    # Migrate existing Huawei installations to add ha_device_id if missing
+    detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
+    is_huawei = detected_entities.get("grid_charge_switch") is not None
+    
+    if is_huawei and not detected_entities.get("ha_device_id"):
+        _LOGGER.warning("Huawei system detected but ha_device_id missing - attempting migration")
+        
+        from homeassistant.helpers import entity_registry as er, device_registry as dr
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        
+        grid_switch_entity_id = detected_entities.get("grid_charge_switch")
+        if grid_switch_entity_id:
+            grid_switch_entry = entity_registry.entities.get(grid_switch_entity_id)
+            
+            if grid_switch_entry and grid_switch_entry.device_id:
+                battery_device = device_registry.async_get(grid_switch_entry.device_id)
+                
+                if battery_device:
+                    detected_entities["ha_device_id"] = battery_device.id
+                    
+                    # Update the config entry with the new ha_device_id
+                    new_data = {**entry.data}
+                    if CONF_DETECTED_ENTITIES in new_data:
+                        new_data[CONF_DETECTED_ENTITIES]["ha_device_id"] = battery_device.id
+                    
+                    hass.config_entries.async_update_entry(entry, data=new_data)
+                    
+                    _LOGGER.info(
+                        "✅ Migration successful: Added ha_device_id=%s (device: %s)",
+                        battery_device.id,
+                        battery_device.name
+                    )
+                else:
+                    _LOGGER.error("❌ Migration failed: Could not find battery device")
+            else:
+                _LOGGER.error("❌ Migration failed: grid_charge_switch entity not found in registry")
+        else:
+            _LOGGER.error("❌ Migration failed: No grid_charge_switch entity configured")
+
     # Initialize battery control executor if battery entities are configured
     battery_executor = None
-    detected_entities = config.get(CONF_DETECTED_ENTITIES, {})
     
     # Check if we have minimum required entities
     # For Huawei: battery_mode_select is required, battery_charge_power is optional (uses forcible_charge service)
