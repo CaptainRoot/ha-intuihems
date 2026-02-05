@@ -135,7 +135,6 @@ SWITCH_TYPE_DEMO_MODE: Final = "demo_mode"
 SOLAREDGE_COMMAND_MODE_MAXIMIZE_SELF_CONSUMPTION: Final = "Maximize Self Consumption"
 SOLAREDGE_COMMAND_MODE_CHARGE_FROM_SOLAR_POWER_AND_GRID: Final = "Charge from Solar Power and Grid"
 
-
 # Device-based control entity mappings
 # Maps (platform, manufacturer, model_pattern) -> control entity patterns
 DEVICE_CONTROL_MAPPINGS: Final = {
