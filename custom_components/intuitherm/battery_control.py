@@ -476,7 +476,7 @@ class BatteryControlExecutor:
                     if self.battery_charge_power:
                         await self.hass.services.async_call(
                             "number", "set_value",
-                            {"entity_id": self.battery_charge_power, "value":  int(self.battery_max_power * 1000)},
+                            {"entity_id": self.battery_charge_power, "value": int(self.battery_max_power * 1000)},
                             blocking=True,
                         )
                     
